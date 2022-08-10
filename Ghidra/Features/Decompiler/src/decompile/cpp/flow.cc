@@ -1142,15 +1142,34 @@ void FlowInfo::inlineEZClone(const FlowInfo &inlineflow, PcodeOp *&callop)
   }
 
   do {
+    const map<Address,VisitStat>& visited(inlineflow.visited);
     for (worklist_t::const_iterator it = worklist.cbegin();
         it != worklist.cend(); it++) {
       worklist_t::const_reference work = (*it);
       PcodeOp *const&opclone1 = std::get<0>(work);
       uint4 ix = std::get<1>(work);
       const Address &addr = opclone1->getIn(ix)->getAddr();
-      if (rewriteseq.find(addr) == rewriteseq.end())
+      const Address *paddr = &addr;
+      map<Address, SeqNum>::const_iterator iter = rewriteseq.find(*paddr);
+      bool docont = false;
+      while (iter == rewriteseq.cend())
+      {
+        map<Address,VisitStat>::const_iterator viter = visited.find(*paddr);
+        if (viter==visited.cend()){
+          docont = true;
+          break;
+        }
+        viter = visited.find( (*viter).first + (*viter).second.size );
+        if (viter==visited.cend()){
+          docont = true;
+          break;
+        }
+        paddr = &viter->first;
+        iter = rewriteseq.find(*paddr);
+      }
+      if (docont)
         continue;
-      const SeqNum &foundseq = rewriteseq[addr];
+      const SeqNum &foundseq = rewriteseq[*paddr];
       const SeqNum &cloneseq = opclone1->getSeqNum();
       // Use associations info to inhabit PcodeOps.
       Varnode *vnconst = data.newConstant(4,
