@@ -1087,9 +1087,7 @@ void FlowInfo::inlineEZClone(const FlowInfo &inlineflow, PcodeOp *&callop)
   }
   PcodeOp *nextop = *iter;
   const Address &retaddr = nextop->getAddr();
-  if (op->getAddr() == retaddr) {
-    skipreturnencounter = true;
-  }
+  bool addrisconstant = calladdr == retaddr;
   // If the inlining "jumps back" this starts a new basic block
   if (!skipreturnencounter)
     data.opMarkStartBasic(nextop);
@@ -1103,10 +1101,15 @@ void FlowInfo::inlineEZClone(const FlowInfo &inlineflow, PcodeOp *&callop)
       // Old logic did end rewriting at here.
       if (skipreturnencounter)
         break;
+      Varnode *vnretAddr;
+      if (addrisconstant)
+        vnretAddr = data.newConstant(4,
+            (uint4) (nextop->getTime() - op->getTime()));
+      else
+        vnretAddr = data.newCodeRef(retaddr);
       // Set a fallthrough address as it's done in inlineClone.
       PcodeOp *retop = data.newOp(1, myseq);
       data.opSetOpcode(retop, OpCode::CPUI_BRANCH);
-      Varnode *vnretAddr = data.newCodeRef(retaddr);
       data.opSetInput(retop, vnretAddr, 0);
       docont = true;
     }
