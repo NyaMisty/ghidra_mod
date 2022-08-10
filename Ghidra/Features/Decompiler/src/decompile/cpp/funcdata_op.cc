@@ -823,7 +823,7 @@ bool Funcdata::inlineFlow(Funcdata *inlinefd,FlowInfo &flow,PcodeOp *callop)
     // With an EZ clone there are no jumptables to clone
     list<PcodeOp *>::const_iterator oiter = obank.endDead();
     --oiter;			// There is at least one op
-    flow.inlineEZClone(inlineflow,callop->getAddr());
+    flow.inlineEZClone(inlineflow,callop);
     ++oiter;
     if (oiter != obank.endDead()) { // If there was at least one PcodeOp cloned
       PcodeOp *firstop = *oiter;

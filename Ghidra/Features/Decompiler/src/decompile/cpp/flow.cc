@@ -1065,17 +1065,99 @@ void FlowInfo::inlineClone(const FlowInfo &inlineflow,const Address &retaddr)
 /// the Funcdata for \b this flow but are reassigned a new fixed address,
 /// and the RETURN op is eliminated.
 /// \param inlineflow is the given in-line flow to clone
-/// \param calladdr is the fixed address assigned to the cloned PcodeOps
-void FlowInfo::inlineEZClone(const FlowInfo &inlineflow,const Address &calladdr)
+/// \param callop is the PcodeOp responsible for cloning PcodeOps of the FuncData.
+void FlowInfo::inlineEZClone(const FlowInfo &inlineflow, PcodeOp *&callop)
 
 {
-  list<PcodeOp *>::const_iterator iter;
-  for(iter=inlineflow.data.beginOpDead();iter!=inlineflow.data.endOpDead();++iter) {
-    PcodeOp *op = *iter;
-    if (op->code() == CPUI_RETURN) break;
-    SeqNum myseq(calladdr,op->getSeqNum().getTime());
-    data.cloneOp(op,myseq);
+  map<Address, SeqNum> rewriteseq;
+  using pileof_inlineEZ = tuple<PcodeOp*, uint4>;
+  using worklist_t=vector<pileof_inlineEZ>;
+  worklist_t worklist;
+  AddrSpace *spc = data.getArch()->getDefaultCodeSpace();
+  Address addr(spc, -1);
+  const Address &calladdr = callop->getAddr();
+  const SeqNum &callseq = callop->getSeqNum();
+  //!section FlowInfo::testHardInlineRestrictions.
+  bool skipreturnencounter = false;
+  PcodeOp *&op = callop;
+  list<PcodeOp*>::iterator iter = op->getInsertIter();
+  ++iter;
+  if (iter == obank.endDead()) {
+    skipreturnencounter = true;
   }
+  PcodeOp *nextop = *iter;
+  const Address &retaddr = nextop->getAddr();
+  if (op->getAddr() == retaddr) {
+    skipreturnencounter = true;
+  }
+  // If the inlining "jumps back" this starts a new basic block
+  if (!skipreturnencounter)
+    data.opMarkStartBasic(nextop);
+  //!section end
+  for (list<PcodeOp*>::const_iterator iter = inlineflow.data.beginOpDead();
+      iter != inlineflow.data.endOpDead(); ++iter) {
+    PcodeOp *op = *iter;
+    SeqNum myseq(calladdr, op->getSeqNum().getTime());
+    bool docont = false;
+    if (op->code() == CPUI_RETURN) {
+      // Old logic did end rewriting at here.
+      if (skipreturnencounter)
+        break;
+      // Set a fallthrough address as it's done in inlineClone.
+      PcodeOp *retop = data.newOp(1, myseq);
+      data.opSetOpcode(retop, OpCode::CPUI_BRANCH);
+      Varnode *vnretAddr = data.newCodeRef(retaddr);
+      data.opSetInput(retop, vnretAddr, 0);
+      docont = true;
+    }
+    const Address &addr2 = op->getSeqNum().getAddr();
+    bool doput = addr2 != addr;
+    // Keep record of an association about an address update operation.
+    if (doput) {
+      rewriteseq[addr2] = myseq;
+      addr = addr2;
+    }
+    if (docont)
+      continue;
+    // Pile of to-do list.
+    PcodeOp *cloneop = data.cloneOp(op, myseq);
+    if (cloneop->isCallOrBranch())
+      xrefInlinedBranch(cloneop);
+    do {
+      bool dobreak = true;
+      if (cloneop->code() == OpCode::CPUI_CBRANCH)
+        dobreak = false;
+      else if (cloneop->code() == OpCode::CPUI_BRANCH)
+        dobreak = false;
+      if (dobreak)
+        break;
+
+      for (int4 i = 0; i < cloneop->numInput(); i++) {
+        if (spc != cloneop->getIn(i)->getSpace())
+          continue;
+        pileof_inlineEZ tup = make_tuple(cloneop, (uint4) i);
+        worklist.push_back(tup);
+      }
+    } while (false);
+  }
+
+  do {
+    for (worklist_t::const_iterator it = worklist.cbegin();
+        it != worklist.cend(); it++) {
+      worklist_t::const_reference work = (*it);
+      PcodeOp *const&opclone1 = std::get<0>(work);
+      uint4 ix = std::get<1>(work);
+      const Address &addr = opclone1->getIn(ix)->getAddr();
+      if (rewriteseq.find(addr) == rewriteseq.end())
+        continue;
+      const SeqNum &foundseq = rewriteseq[addr];
+      const SeqNum &cloneseq = opclone1->getSeqNum();
+      // Use associations info to inhabit PcodeOps.
+      Varnode *vnconst = data.newConstant(4,
+          (uint4) (foundseq.getTime() - cloneseq.getTime()));
+      data.opSetInput(opclone1, vnconst, ix);
+    }
+  } while (false);
   // Because we are processing only straightline code and it is all getting assigned to one
   // address, we don't touch unprocessed, addrlist, or visited
 }
@@ -1121,18 +1203,20 @@ bool FlowInfo::testHardInlineRestrictions(Funcdata *inlinefd,PcodeOp *op,Address
   return true;
 }
 
-/// A function is in the EZ model if it is a straight-line leaf function.
-/// \return \b true if this flow contains no CALL or BRANCH ops
+/// A function is in the EZ model if it is function without an indirect jump and an noreturn attribute.
+/// \return \b true if this flow contains no CALLIND or BRANCHIND ops.
 bool FlowInfo::checkEZModel(void) const
 
 {
-  list<PcodeOp *>::const_iterator iter = obank.beginDead();
-  while(iter != obank.endDead()) {
-    PcodeOp *op = *iter;
-    if (op->isCallOrBranch()) return false;
-    ++iter;
+  do{
+   if (data.getFuncProto().isNoReturn())
+     break;
+   if (!tablelist.empty())
+      break;
+   return true;
   }
-  return true;
+  while(false);
+  return false;
 }
 
 /// \brief Inject the given payload into \b this flow

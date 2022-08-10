@@ -153,7 +153,7 @@ public:
   void injectPcode(void);			///< Perform substitution on any op that requires \e injection
   void forwardRecursion(const FlowInfo &op2);	///< Pull in-lining recursion information from another flow
   void inlineClone(const FlowInfo &inlineflow,const Address &retaddr);
-  void inlineEZClone(const FlowInfo &inlineflow,const Address &calladdr);
+  void inlineEZClone(const FlowInfo &inlineflow,PcodeOp*& callop);
   int4 getSize(void) const { return (int4)(maxaddr.getOffset() - minaddr.getOffset()); }	///< Get the number of bytes covered by the flow
   bool hasInject(void) const { return !injectlist.empty(); }		///< Does \b this flow have injections
   bool hasUnimplemented(void) const { return ((flags & unimplemented_present)!=0); }	///< Does \b this flow have unimiplemented instructions
