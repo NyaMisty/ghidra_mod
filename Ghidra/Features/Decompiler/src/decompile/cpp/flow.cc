@@ -91,7 +91,7 @@ PcodeOp *FlowInfo::fallthruOp(PcodeOp *op) const
   ++iter;
   if (iter != obank.endDead()) {
     retop = *iter;
-    if (!retop->isInstructionStart()) // If within same instruction
+    if (retop->getAddr() == op->getAddr()) // If within same instruction
       return retop;		// Then this is the fall thru
   }
   // Find address of instruction containing this op
