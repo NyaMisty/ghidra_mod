@@ -1085,9 +1085,13 @@ void FlowInfo::inlineEZClone(const FlowInfo &inlineflow, PcodeOp *&callop)
   if (iter == obank.endDead()) {
     skipreturnencounter = true;
   }
-  PcodeOp *nextop = *iter;
-  const Address &retaddr = nextop->getAddr();
-  bool addrisconstant = calladdr == retaddr;
+  bool addrisconstant = false;
+  PcodeOp *nextop = NULL;
+  if (!skipreturnencounter)
+  nextop = *iter;
+  Address constzero = glb->getConstant(0);
+  const Address &retaddr = skipreturnencounter ? constzero : nextop->getAddr();
+  addrisconstant = calladdr == retaddr;
   // If the inlining "jumps back" this starts a new basic block
   if (!skipreturnencounter)
     data.opMarkStartBasic(nextop);
