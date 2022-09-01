@@ -1827,7 +1827,7 @@ int4 CollapseStructure::collapseInternal(FlowBlock *targetbl)
       }
     }
   } while(fullchange);
-  return isolated_count;
+  return isolated_count >= 0 ? isolated_count : INT32_MAX;
 }
 
 /// Simplify just the conditional AND/OR constructions.

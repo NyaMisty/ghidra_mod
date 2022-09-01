@@ -2466,6 +2466,7 @@ void Heritage::heritage(void)
   AddrSpace *stackSpace = (AddrSpace *)0;
   vector<PcodeOp *> freeStores;
   PreferSplitManager splitmanage;
+  bool reprocessStackCount_visited = false;
 
   if (maxdepth == -1)		// Has a restructure been forced
     buildADT();
@@ -2486,6 +2487,7 @@ void Heritage::heritage(void)
       info->loadGuardSearch = true;
       if (discoverIndexedStackPointers(info->space,freeStores,true)) {
 	    reprocessStackCount += 1;
+	    if (!reprocessStackCount_visited) reprocessStackCount_visited = true;
 	    stackSpace = info->space;
       }
     }
@@ -2542,7 +2544,7 @@ void Heritage::heritage(void)
   }
   placeMultiequals();
   rename();
-  if (reprocessStackCount > 0)
+  if (reprocessStackCount_visited)
     reprocessFreeStores(stackSpace, freeStores);
   analyzeNewLoadGuards();
   handleNewLoadCopies();
