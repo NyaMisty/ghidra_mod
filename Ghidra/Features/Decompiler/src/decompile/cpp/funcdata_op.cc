@@ -825,6 +825,13 @@ bool Funcdata::inlineFlow(Funcdata *inlinefd,FlowInfo &flow,PcodeOp *callop)
     --oiter;			// There is at least one op
     flow.inlineEZClone(inlineflow,callop);
     ++oiter;
+    do {
+      if (oiter == obank.endDead())
+        break;
+      if (flow.isFlowForInline())
+        break;
+      heritage.phantomDeps.insert(callop->getAddr());
+    } while (false);
     if (oiter != obank.endDead()) { // If there was at least one PcodeOp cloned
       PcodeOp *firstop = *oiter;
       oiter = obank.endDead();
