@@ -100,6 +100,7 @@ private:
   Funcdata *inline_head;		///< First function in the in-lining chain
   set<Address> *inline_recursion;	///< Active list of addresses for function that are in-lined
   set<Address> inline_base;		///< Storage for addresses of functions that are in-lined
+  vector<PcodeOp *> pendingmarkbasicstart;   ///< List of p-code ops that need a basicstart mark.
   bool hasPossibleUnreachable(void) const { return ((flags & possible_unreachable)!=0); }	///< Are there possible unreachable ops
   void setPossibleUnreachable(void) { flags |= possible_unreachable; }	///< Mark that there may be unreachable ops
   void clearProperties(void);		///< Clear any discovered flow properties

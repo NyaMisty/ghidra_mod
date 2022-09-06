@@ -71,6 +71,7 @@ FlowInfo::FlowInfo(Funcdata &d,PcodeOpBank &o,BlockGraph &b,vector<FuncCallSpecs
   insn_count = op2->insn_count;
   insn_max = op2->insn_max;
   flowoverride_present = data.getOverride().hasFlowOverride();
+  pendingmarkbasicstart = op2->pendingmarkbasicstart;
 }
 
 void FlowInfo::clearProperties(void)
@@ -262,17 +263,18 @@ PcodeOp *FlowInfo::xrefControlFlow(list<PcodeOp *>::const_iterator oiter,bool &s
     case CPUI_CBRANCH:
     {
 	const Address &destaddr( op->getIn(0)->getAddr() );
+  pendingmarkbasicstart.push_back(op);
 	if (destaddr.isConstant()) {
 	  Address fallThruAddr;
 	  PcodeOp *destop = findRelTarget(op,fallThruAddr);
 	  if (destop != (PcodeOp *)0) {
-	    data.opMarkStartBasic(destop);	// Make sure the target op is a basic block start
 	    uintm newtime = destop->getTime();
 	    if (newtime > maxtime)
 	      maxtime = newtime;
 	  }
-	  else
+	  else {
 	    isfallthru = true;		// Relative branch is to end of instruction
+	  }
 	}
 	else
 	  newAddress(op,destaddr); // Generate branch address
@@ -282,17 +284,18 @@ PcodeOp *FlowInfo::xrefControlFlow(list<PcodeOp *>::const_iterator oiter,bool &s
     case CPUI_BRANCH:
       {
 	const Address &destaddr( op->getIn(0)->getAddr() );
+  pendingmarkbasicstart.push_back(op);
 	if (destaddr.isConstant()) {
 	  Address fallThruAddr;
 	  PcodeOp *destop = findRelTarget(op,fallThruAddr);
 	  if (destop != (PcodeOp *)0) {
-	    data.opMarkStartBasic(destop);	// Make sure the target op is a basic block start
 	    uintm newtime = destop->getTime();
 	    if (newtime > maxtime)
 	      maxtime = newtime;
 	  }
-	  else
+	  else {
 	    isfallthru = true;		// Relative branch is to end of instruction
+	  }
 	}
 	else
 	  newAddress(op,destaddr); // Generate branch address
@@ -780,6 +783,14 @@ void FlowInfo::generateOps(void)
     if (hasInject())
       injectPcode();
   } while(!tablelist.empty());	// Inlining or multistage may have added new indirect branches
+  for (vector<PcodeOp*>::const_iterator it = pendingmarkbasicstart.cbegin();
+      it != pendingmarkbasicstart.cend(); it++) {
+    PcodeOp *destop = branchTarget(*it);
+    if (destop != (PcodeOp*) 0) {
+      data.opMarkStartBasic(destop); // Make sure the target op is a basic block start
+    }
+  }
+  pendingmarkbasicstart.clear();
 }
 
 void FlowInfo::generateBlocks(void)
