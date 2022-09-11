@@ -15,6 +15,7 @@
  */
 #include "typeop.hh"
 #include "funcdata.hh"
+static void printBranchRelTarget(Architecture*, ostream&, const PcodeOp*);
 
 /// \param inst will hold the array of TypeOp objects, indexed on op-code
 /// \param tlst is the corresponding TypeFactory for the Architecture
@@ -513,11 +514,26 @@ TypeOpBranch::TypeOpBranch(TypeFactory *t) : TypeOp(t,CPUI_BRANCH,"goto")
   behave = new OpBehavior(CPUI_BRANCH,false,true); // Dummy behavior
 }
 
+static void printBranchRelTarget(Architecture *glb, ostream &s, const PcodeOp *op) {
+  uintb offset = op->getIn(0)->getOffset();
+  uint4 size = op->getIn(0)->getSize();
+  const int _4 = 4;
+  const Address relTarget(
+      glb->getConstant(
+          (uint8) ((uint4) ((int4) op->getTime()
+              + (int4) sign_extend(offset, size, _4)))));
+  Varnode vn(_4, relTarget, glb->types->getBase(_4, TYPE_UNKNOWN));
+  Varnode::printRaw(s, &vn);
+}
+
 void TypeOpBranch::printRaw(ostream &s,const PcodeOp *op)
 
 {
   s << name << ' ';
-  Varnode::printRaw(s,op->getIn(0));
+  if (op->getIn(0)->isConstant())
+    printBranchRelTarget(tlst->getArch(), s, op);
+  else
+    Varnode::printRaw(s,op->getIn(0));
 }
 
 TypeOpCbranch::TypeOpCbranch(TypeFactory *t) : TypeOp(t,CPUI_CBRANCH,"goto")
@@ -543,7 +559,10 @@ void TypeOpCbranch::printRaw(ostream &s,const PcodeOp *op)
 
 {
   s << name << ' ';
-  Varnode::printRaw(s,op->getIn(0));	// Print the distant (non-fallthru) destination
+  if (op->getIn(0)->isConstant())
+    printBranchRelTarget(tlst->getArch(), s, op);
+  else
+    Varnode::printRaw(s,op->getIn(0));	// Print the distant (non-fallthru) destination
   s << " if (";
   Varnode::printRaw(s,op->getIn(1));
   if (op->isBooleanFlip()^op->isFallthruTrue())
