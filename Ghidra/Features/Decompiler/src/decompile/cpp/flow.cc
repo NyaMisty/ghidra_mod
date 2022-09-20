@@ -1083,7 +1083,7 @@ void FlowInfo::inlineEZClone(const FlowInfo &inlineflow, PcodeOp *&callop)
   map<Address, SeqNum> rewriteseq;
   using pileof_inlineEZ = tuple<PcodeOp*, uint4>;
   using worklist_t=vector<pileof_inlineEZ>;
-  worklist_t worklist;
+  worklist_t worklist, worklist_injectbranch;
   AddrSpace *spc = data.getArch()->getDefaultCodeSpace();
   Address addr(spc, -1);
   const Address &calladdr = callop->getAddr();
@@ -1159,6 +1159,44 @@ void FlowInfo::inlineEZClone(const FlowInfo &inlineflow, PcodeOp *&callop)
     } while (false);
   }
 
+  bool first = true;
+  PcodeOpTree::const_iterator iter2;
+  for (PcodeOpTree::const_iterator iter = inlineflow.data.beginOpAll();
+      iter != inlineflow.data.endOpAll(); ++iter) {
+    // Pile of to-do list. A first op with decreasing sequence number is followed by a branch op to meet the correspondance with *fallthruOp* result even after the op is cloned.
+    do {
+      if (first && iter == inlineflow.data.beginOpAll()) {
+        first = false;
+        break;
+      }
+      iter2 = iter;
+      --iter2;
+      uint4 iter2t = (iter2->second)->getTime();
+      uint4 itert = (iter->second)->getTime();
+      if (iter2t <= itert)
+        break;
+      const SeqNum &sq_iter2(iter2->second->getSeqNum());
+      PcodeOp *inlineop_data = data.findOp(
+          SeqNum(calladdr, sq_iter2.getTime()));
+      if (inlineop_data == NULL)
+        break;
+      worklist_injectbranch.emplace_back(inlineop_data, itert);
+    } while (false);
+  }
+
+  do {
+    for (worklist_t::const_iterator it = worklist_injectbranch.cbegin();
+        it != worklist_injectbranch.cend(); it++) {
+      worklist_t::const_reference work = (*it);
+      PcodeOp *opclone1 = std::get<0>(work);
+      uint4 targetSeq = std::get<1>(work);
+      PcodeOp *opnew = data.newOp(1, calladdr);
+      data.opSetOpcode(opnew, CPUI_BRANCH);
+      data.opSetInput(opnew, data.newConstant(4, targetSeq - opnew->getTime()),
+          0);
+      data.opDeadInsertAfter(opnew, opclone1);
+    }
+  } while (false);
   do {
     const map<Address,VisitStat>& visited(inlineflow.visited);
     for (worklist_t::const_iterator it = worklist.cbegin();
