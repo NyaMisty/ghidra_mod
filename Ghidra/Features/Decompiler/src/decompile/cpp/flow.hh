@@ -100,6 +100,8 @@ private:
   Funcdata *inline_head;		///< First function in the in-lining chain
   set<Address> *inline_recursion;	///< Active list of addresses for function that are in-lined
   set<Address> inline_base;		///< Storage for addresses of functions that are in-lined
+  set<Address> *ezflow_inline_recursion;	///< Active list of addresses for function that are ez-in-lined
+  set<Address> ezflow_inline_base;	///< Storage for addresses of functions that are ez-in-lined
   vector<PcodeOp *> pendingmarkbasicstart;   ///< List of p-code ops that need a basicstart mark.
   bool hasPossibleUnreachable(void) const { return ((flags & possible_unreachable)!=0); }	///< Are there possible unreachable ops
   void setPossibleUnreachable(void) { flags |= possible_unreachable; }	///< Mark that there may be unreachable ops
@@ -137,7 +139,7 @@ private:
   void recoverJumpTables(vector<JumpTable *> &newTables,vector<PcodeOp *> &notreached);
   void deleteCallSpec(FuncCallSpecs *fc);		///< Remove the given call site from the list for \b this function
   void truncateIndirectJump(PcodeOp *op,int4 failuremode);  	///< Treat indirect jump as indirect call that never returns
-  static bool isInArray(vector<PcodeOp *> &array,PcodeOp *op);
+  bool isInArray(vector<PcodeOp *> &array,PcodeOp *op);
 public:
   FlowInfo(Funcdata &d,PcodeOpBank &o,BlockGraph &b,vector<FuncCallSpecs *> &q);	///< Constructor
   FlowInfo(Funcdata &d,PcodeOpBank &o,BlockGraph &b,vector<FuncCallSpecs *> &q,const FlowInfo *op2);	///< Cloning constructor

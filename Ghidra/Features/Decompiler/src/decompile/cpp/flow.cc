@@ -34,6 +34,7 @@ FlowInfo::FlowInfo(Funcdata &d,PcodeOpBank &o,BlockGraph &b,vector<FuncCallSpecs
   emitter.setFuncdata(&d);
   inline_head = (Funcdata *)0;
   inline_recursion = (set<Address> *)0;
+  ezflow_inline_recursion = (set<Address> *)0;
   insn_count = 0;
   insn_max = ~((uint4)0);
   flowoverride_present = data.getOverride().hasFlowOverride();
@@ -65,9 +66,13 @@ FlowInfo::FlowInfo(Funcdata &d,PcodeOpBank &o,BlockGraph &b,vector<FuncCallSpecs
   if (inline_head != (Funcdata *)0) {
     inline_base = op2->inline_base;
     inline_recursion = &inline_base;
+    ezflow_inline_base = op2->ezflow_inline_base;
+    ezflow_inline_recursion = &ezflow_inline_base;
   }
-  else
-    inline_recursion = (set<Address> *)0;
+  else {
+    inline_recursion = (set<Address>*) 0;
+    ezflow_inline_recursion = (set<Address>*) 0;
+  }
   insn_count = op2->insn_count;
   insn_max = op2->insn_max;
   flowoverride_present = data.getOverride().hasFlowOverride();
@@ -697,9 +702,26 @@ bool FlowInfo::setupCallindSpecs(PcodeOp *op,FuncCallSpecs *fc)
   res = new FuncCallSpecs(op);
   qlst.push_back(res);
 
+  bool skipoverride = false;
+  do {
+    //I dunno try below.
+    //if (fc != NULL)
+    //  break;
+    if (ezflow_inline_recursion == NULL)
+      break;
+    if (ezflow_inline_recursion->empty())
+      break;
+    if (ezflow_inline_recursion->find(op->getAddr())
+        == ezflow_inline_recursion->cend())
+      break;
+    skipoverride = true;
+  } while (false);
+
+  if (!skipoverride)
   data.getOverride().applyIndirect(data,*res);
   if (fc != (FuncCallSpecs *)0 && fc->getEntryAddress() == res->getEntryAddress())
     res->setAddress(Address()); // Cancel any indirect override
+  if (!skipoverride)
   data.getOverride().applyPrototype(data,*res);
   queryCall(*res);
 
@@ -739,6 +761,9 @@ bool FlowInfo::isInArray(vector<PcodeOp *> &array,PcodeOp *op)
   for(int4 i=0;i<array.size();++i) {
     if (array[i] == op) return true;
   }
+  if (ezflow_inline_recursion->find(op->getAddr())
+      != ezflow_inline_recursion->cend())
+    return true;
   return false;
 }
 
@@ -1017,6 +1042,7 @@ void FlowInfo::forwardRecursion(const FlowInfo &op2)
 {
   inline_recursion = op2.inline_recursion;
   inline_head = op2.inline_head;
+  ezflow_inline_recursion = op2.ezflow_inline_recursion;
 }
 
 /// If the given injected op is a CALL, CALLIND, or BRANCHIND,
@@ -1103,6 +1129,7 @@ void FlowInfo::inlineEZClone(const FlowInfo &inlineflow, PcodeOp *&callop)
   Address constzero = glb->getConstant(0);
   const Address &retaddr = skipreturnencounter ? constzero : nextop->getAddr();
   addrisconstant = calladdr == retaddr;
+  ezflow_inline_recursion->insert(op->getAddr());
   // If the inlining "jumps back" this starts a new basic block
   if (!skipreturnencounter)
     data.opMarkStartBasic(nextop);
@@ -1443,6 +1470,7 @@ void FlowInfo::injectPcode(void)
     inline_recursion = &inline_base;
     inline_recursion->insert(data.getAddress()); // Insert ourselves
     //    inline_head = (Funcdata *)0;
+    ezflow_inline_recursion = &ezflow_inline_base;
   }
   else {
     inline_recursion->insert(data.getAddress()); // Insert ourselves
