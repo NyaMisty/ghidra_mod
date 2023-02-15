@@ -15,6 +15,9 @@
  */
 #include "flow.hh"
 
+#include <tuple>
+using namespace std;
+
 /// Prepare for tracing flow for a new function.
 /// The Funcdata object and references to its internal containers must be explicitly given.
 /// \param d is the new function to trace
@@ -1107,7 +1110,7 @@ void FlowInfo::inlineEZClone(const FlowInfo &inlineflow, PcodeOp *&callop)
 
 {
   map<Address, SeqNum> rewriteseq;
-  using pileof_inlineEZ = tuple<PcodeOp*, uint4>;
+  using pileof_inlineEZ = std::tuple<PcodeOp*, uint4>;
   using worklist_t=vector<pileof_inlineEZ>;
   worklist_t worklist, worklist_injectbranch;
   AddrSpace *spc = data.getArch()->getDefaultCodeSpace();
