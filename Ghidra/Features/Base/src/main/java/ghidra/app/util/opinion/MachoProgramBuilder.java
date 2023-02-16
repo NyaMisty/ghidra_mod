@@ -1794,7 +1794,9 @@ public class MachoProgramBuilder {
 			}
 			else {
 				newChainValue = DyldChainedPtr.getTarget(pointerFormat, chainValue);
-				newChainValue += imageBaseOffset;
+				if (pointerFormat == DyldChainType.DYLD_CHAINED_PTR_64_OFFSET) {
+					newChainValue += imageBaseOffset;
+				}
 			}
 
 			if (!start || !program.getRelocationTable().hasRelocation(chainLoc)) {
