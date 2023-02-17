@@ -150,7 +150,8 @@ public class SpecifyCPrototypeAction extends AbstractDecompilerAction {
 		if (function instanceof UndefinedFunction) {
 			return false;
 		}
-		return getFunction(function, context) != null;
+        // PATCH: not using getFunction(Function function, DecompilerActionContext context), because it will allow change fun signature everywhere
+		return getFunction(context) != null;
 	}
 
 	@Override
