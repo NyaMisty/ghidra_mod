@@ -618,6 +618,7 @@ public interface TargetObjectSchema {
 			}
 			if (sch.getInterfaces().contains(type) && (parentIsCanonical || !requireCanonical)) {
 				result.addPattern(prefix);
+				return;
 			}
 			if (!visited.add(sch)) {
 				return;
@@ -641,13 +642,13 @@ public interface TargetObjectSchema {
 			for (Entry<String, AttributeSchema> ent : sch.getAttributeSchemas().entrySet()) {
 				List<String> extended = PathUtils.extend(prefix, ent.getKey());
 				TargetObjectSchema attrSchema = ctx.getSchema(ent.getValue().getSchema());
-				searchFor(attrSchema, result, extended, parentIsCanonical, type, requireAggregate,
+				searchFor(attrSchema, result, extended, isCanonical, type, requireAggregate,
 					requireCanonical, visited);
 			}
 			List<String> daExtended = PathUtils.extend(prefix, "");
 			TargetObjectSchema daSchema =
 				ctx.getSchema(sch.getDefaultAttributeSchema().getSchema());
-			searchFor(daSchema, result, daExtended, parentIsCanonical, type, requireAggregate,
+			searchFor(daSchema, result, daExtended, isCanonical, type, requireAggregate,
 				requireCanonical, visited);
 
 			visited.remove(sch);
