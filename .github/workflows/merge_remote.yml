@@ -1,0 +1,79 @@
+name: Scheduled Merge Remote Action
+env:
+  UPSTREAM: https://github.com/NationalSecurityAgency/ghidra.git
+  UPSTREAM_BRANCH: master
+  LOCAL_BRANCH: master
+
+on: 
+  schedule:
+    # 4 times a day
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  merge-upstream:
+    runs-on: ubuntu-latest
+    steps: 
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ env.LOCAL_BRANCH }}             # set the branch to merge to
+          fetch-depth: 0
+      - name: Setup committer
+        run: |
+          git config --global user.email "gh-worker@misty.moe"
+          git config --global user.name "NyaMisty BuildWorker"
+      - name: Merge Upstream By Merge
+        run: |
+          set +x
+          git remote add -f upstream ${{ env.UPSTREAM }} &&
+          git remote -v &&
+          git branch --all &&
+          git config --list &&
+          git checkout master
+          echo "Upstream log: "
+          git log --graph --oneline upstream/${{ env.UPSTREAM_BRANCH }} | head -n 30
+          echo "Our log: "
+          git log --graph --oneline ${{ env.LOCAL_BRANCH }} | head -n 10
+
+          LAST_MSG=$(git log -1 --pretty=%B)
+          ORIGINAL_HEAD=$(git rev-parse HEAD)
+
+          git merge --no-commit --no-ff upstream/${{ env.UPSTREAM_BRANCH }}
+          if [ ! -n "$(git status --porcelain)" ]; then
+            # no changes, no work
+            echo "No new commits in upstream, finishing..."
+            exit 0
+          else
+            echo "New commits arrived!"
+          fi
+
+          if [[ "$LAST_MSG" =~ ^AutoMerge-\d+-\d+$ ]]; then
+            echo "Last commit was AutoMerge, drop it"
+            git reset HEAD~1
+          fi
+
+          echo "Cleaning up and Doing REAL Merging!"
+          git reset --hard && git clean -fd
+          echo "Merge fork point: $(git merge-base --fork-point upstream/${{ env.UPSTREAM_BRANCH }} ${{ env.LOCAL_BRANCH }})"
+          echo "Merge fork point: $(git merge-base --fork-point ${{ env.LOCAL_BRANCH }} upstream/${{ env.UPSTREAM_BRANCH }})"
+          if git merge upstream/${{ env.UPSTREAM_BRANCH }} -m "AutoMerge-$(date '+%Y%m%d-%H%M%S')"; then
+            echo "Merge SUCCESSFUL! New log graph:"
+            git log --graph --oneline ${{ env.LOCAL_BRANCH }} | head -n 30
+          else
+            echo "Merge FAILED!"
+            git diff
+            echo "Cleanup!"
+            git reset --hard ORIGINAL_HEAD; git clean -fd
+          fi
+
+      #- name: Prepare to push  
+      #  run: git branch -f master
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ env.LOCAL_BRANCH }}
+          force: true
+
+      - uses: gautamkrishnar/keepalive-workflow@master # using the workflow with default settings
