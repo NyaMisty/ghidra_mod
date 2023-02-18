@@ -73,13 +73,18 @@ class EditLabelAction extends ListingContextAction {
 			return false;
 		}
 
-		if (symbol.getSymbolType() == SymbolType.FUNCTION) {
-			ProgramLocation location = context.getLocation();
-			if (location instanceof OperandFieldLocation) {
-				// Functions in operand fields are handled by the EditNameAction.  Return false
-				// here to prevent 2 popup actions from appearing in the menu.
-				return false;
-			}
+        ProgramLocation location = context.getLocation();
+        if (location instanceof OperandFieldLocation) {
+            OperandFieldLocation oloc = (OperandFieldLocation) location;
+            if (symbol.getSymbolType() == SymbolType.FUNCTION) {
+                // Functions in operand fields are handled by the EditNameAction.  Return false
+                // here to prevent 2 popup actions from appearing in the menu.
+                return false;
+            }
+            if (oloc.getVariableOffset() != null) {
+                // Variables in operand fields are handled by the EditOperandNameAction.
+                return false;
+            }
 		}
 
 		getPopupMenuData().setMenuItemName(EDIT_LABEL);
