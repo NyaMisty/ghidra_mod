@@ -6,8 +6,8 @@ env:
 
 on: 
   schedule:
-    # 4 times a day
-    - cron: '0 */6 * * *'
+    # Sync every two hour
+    - cron: '0 */2 * * *'
   workflow_dispatch:
 
 jobs:
@@ -24,8 +24,9 @@ jobs:
           git config --global user.email "gh-worker@misty.moe"
           git config --global user.name "NyaMisty BuildWorker"
       - name: Merge Upstream By Merge
+        id: merge
         run: |
-          set +x
+          set -x
           git remote add -f upstream ${{ env.UPSTREAM }} &&
           git remote -v &&
           git branch --all &&
@@ -43,12 +44,15 @@ jobs:
           if [ ! -n "$(git status --porcelain)" ]; then
             # no changes, no work
             echo "No new commits in upstream, finishing..."
+            echo "updated=0" >> $GITHUB_OUTPUT
             exit 0
           else
             echo "New commits arrived!"
+            echo "updated=1" >> $GITHUB_OUTPUT
           fi
 
-          if [[ "$LAST_MSG" =~ ^AutoMerge-\d+-\d+$ ]]; then
+          #if [[ "$LAST_MSG" =~ ^AutoMerge-[0-9\-_]+$ ]]; then
+          if [[ $LAST_MSG =~ ^AutoMerge-.* ]]; then
             echo "Last commit was AutoMerge, drop it"
             git reset HEAD~1
           fi
@@ -70,6 +74,7 @@ jobs:
       #- name: Prepare to push  
       #  run: git branch -f master
       - name: Push changes
+        if: ${{ steps.merge.outputs.updated == '1' }}
         uses: ad-m/github-push-action@master
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
