@@ -275,8 +275,10 @@ public class LocationReferencesProvider extends ComponentProviderAdapter
 			"<html>Push at any time to refresh the current table of references.<br>" +
 				"This button is highlighted when the data <i>may</i> be stale.<br>");
 
-		SelectionNavigationAction selectionNavigationAction =
-			new SelectionNavigationAction(locationReferencesPlugin, referencesPanel.getTable());
+		// Ghidra Mod - ModalXref - avoid navigateOnSelection
+		//SelectionNavigationAction selectionNavigationAction =
+		//	new SelectionNavigationAction(locationReferencesPlugin, referencesPanel.getTable());
+		//selectionNavigationAction.setSelected(false);
 
 		//@formatter:off
 		String actionName = "Delete Reference";
@@ -312,7 +314,7 @@ public class LocationReferencesProvider extends ComponentProviderAdapter
 		tool.addLocalAction(this, highlightAction);
 		tool.addLocalAction(this, deleteRefAction);
 		tool.addLocalAction(this, removeItemsAction);
-		tool.addLocalAction(this, selectionNavigationAction);
+		//tool.addLocalAction(this, selectionNavigationAction);
 
 		setHelpLocation();
 	}

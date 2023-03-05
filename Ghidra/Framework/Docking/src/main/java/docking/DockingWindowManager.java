@@ -994,7 +994,16 @@ public class DockingWindowManager implements PropertyChangeListener, Placeholder
 
 	private void movePlaceholderToFront(ComponentPlaceholder placeholder, boolean emphasisze) {
 		placeholder.toFront();
-		toFront(root.getWindow(placeholder));
+
+		// Ghidra Mod - Modal Component
+		//     Must do this or modal JDialog will block here
+		var window = root.getWindow(placeholder);
+		if (window instanceof JDialog) {
+			SwingUtilities.invokeLater(() -> toFront(window));
+		} else {
+			toFront(window);
+		}
+
 		if (emphasisze) {
 			placeholder.emphasize();
 		}
