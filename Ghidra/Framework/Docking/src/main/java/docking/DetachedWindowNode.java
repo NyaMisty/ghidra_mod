@@ -319,13 +319,26 @@ class DetachedWindowNode extends WindowNode {
 		return finalTitles;
 	}
 
+	private boolean isForceModal(JComponent comp) {
+		if (comp instanceof DockableComponent) {
+			comp = ((DockableComponent)comp).getProviderComponent();
+			return null != comp.getClientProperty("ghidramod.modalcomponent");
+		}
+		return false;
+	}
+
 	/**
 	 * Creates a new window to host the components tree.
 	 */
 	private void createWindow(JComponent comp) {
 		RootNode root = (RootNode) parent;
-		if (winMgr.isWindowsOnTop() || root.isModal()) {
-			window = createDialog(root);
+		// Ghidra Mod - Supports Modal LocationReferences
+		if (winMgr.isWindowsOnTop() || root.isModal() || isForceModal(comp)) {
+			JDialog dialog = createDialog(root);
+			if (isForceModal(comp)) {
+				dialog.setModal(true);
+			}
+			window = dialog;
 		}
 		else {
 			window = createFrame();
@@ -364,7 +377,9 @@ class DetachedWindowNode extends WindowNode {
 		adjustBounds();
 
 		window.setBounds(bounds);
-		window.setVisible(true);
+		// Ghidra Mod - Modal Component
+		//     Must do this or modal JDialog will block here
+		SwingUtilities.invokeLater(() -> window.setVisible(true));
 	}
 
 	/**
@@ -518,6 +533,12 @@ class DetachedWindowNode extends WindowNode {
 	@Override
 	void close() {
 		child.close();
+		if (window instanceof JDialog) {
+			JDialog dialog = (JDialog) window;
+			if (dialog.isModal()) {
+				dialog.setVisible(false);
+			}
+		}
 	}
 
 	@Override

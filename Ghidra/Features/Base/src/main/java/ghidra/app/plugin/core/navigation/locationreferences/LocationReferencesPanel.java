@@ -17,6 +17,8 @@ package ghidra.app.plugin.core.navigation.locationreferences;
 
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.util.Collection;
 
@@ -29,6 +31,11 @@ import ghidra.framework.plugintool.PluginTool;
 import ghidra.program.model.address.Address;
 import ghidra.program.util.ProgramSelection;
 import ghidra.util.table.*;
+
+import ghidra.app.nav.Navigatable;
+import ghidra.app.services.GoToServiceWrap;
+import ghidra.program.model.listing.Program;
+import ghidra.program.util.ProgramLocation;
 
 /**
  * A panel that contains a table for displaying results of performing a search for references 
@@ -45,6 +52,32 @@ public class LocationReferencesPanel extends JPanel {
 		this.locationReferencesProvider = locationReferencesProvider;
 
 		buildPanel();
+	}
+
+	// Ghidra Mod - Supports Modal LocationReferences - Helper
+	class WrapGoToService extends GoToServiceWrap {
+		private Runnable onGoToRunnable;
+		public WrapGoToService(GoToService gotoService, Runnable onGoTo) {
+			super(gotoService);
+			onGoToRunnable = onGoTo;
+		}
+		private void onGoTo() {
+			if (onGoToRunnable != null) {
+				onGoToRunnable.run();
+			}
+		}
+
+		public boolean goTo(Address goToAddress, Program program) {
+			boolean ret = super.goTo(goToAddress, program);
+			onGoTo();
+			return ret;
+		}
+
+		public boolean goTo(Navigatable navigatable, ProgramLocation loc, Program program) {
+			boolean ret = super.goTo(navigatable, loc, program);
+			onGoTo();
+			return ret;
+		}
 	}
 
 	private void buildPanel() {
@@ -65,6 +98,27 @@ public class LocationReferencesPanel extends JPanel {
 			new GhidraTableFilterPanel<>(table, tableModel);
 		add(tablePanel, BorderLayout.CENTER);
 		add(tableFilterPanel, BorderLayout.SOUTH);
+
+		// Ghidra Mod - Supports Modal LocationReferences
+		putClientProperty("ghidramod.modalcomponent", "1");
+		table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		table.setNavigateOnSelectionEnabled(false);
+		Runnable closePanelRunnable = () -> {
+			locationReferencesProvider.getTool().showComponentProvider(locationReferencesProvider, false);
+			// must do this, or next time the xref panel would be empty
+			locationReferencesProvider.closeComponent();
+		};
+		goToService = new WrapGoToService(goToService, closePanelRunnable);
+		table.installNavigation(goToService, goToService.getDefaultNavigatable());
+		table.addKeyListener(new KeyAdapter() {
+			@Override
+			public void keyPressed(KeyEvent e) {
+				if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
+					closePanelRunnable.run();
+					e.consume();
+				}
+			}
+		});
 	}
 
 	Collection<Address> getReferenceAddresses() {
