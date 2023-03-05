@@ -992,7 +992,6 @@ public class DockingWindowManager implements PropertyChangeListener, Placeholder
 	}
 
 	private void movePlaceholderToFront(ComponentPlaceholder placeholder, boolean emphasisze) {
-
 		if (!placeholder.canTakeFocus()) {
 			// If we move the parent window to the front when the placeholder is not ready, then
 			// some other placeholder will get focus when the window is activated, which we do not
@@ -1000,8 +999,16 @@ public class DockingWindowManager implements PropertyChangeListener, Placeholder
 			// brought to the front.
 			return;
 		}
+		placeholder.toFront();
 
-		toFront(root.getWindow(placeholder));
+		// Ghidra Mod - Modal Component
+		//     Must do this or modal JDialog will block here
+		var window = root.getWindow(placeholder);
+		if (window instanceof JDialog) {
+			SwingUtilities.invokeLater(() -> toFront(window));
+		} else {
+			toFront(window);
+		}
 		if (emphasisze) {
 			placeholder.emphasize();
 		}
