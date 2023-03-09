@@ -26,6 +26,7 @@ import java.util.stream.Collectors;
 
 import javax.swing.*;
 
+import docking.KeyBindingPrecedence;
 import org.apache.commons.collections4.map.LazyMap;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -454,6 +455,23 @@ public class KeyBindingUtils {
 		return (binding == null) ? null : actionMap.get(binding);
 	}
 
+	// Ghidra Mod - Allow partial override for KeyBindings
+	public static boolean isIgnored2(DockingActionIf action) {
+		if (!action.getKeyBindingType().supportsKeyBindings()) {
+			return true;
+		}
+		if (action.getKeyBindingData() != null) {
+			var precedence = action.getKeyBindingData().getKeyBindingPrecedence();
+			if (precedence == KeyBindingPrecedence.ReservedActionsLevel) {
+				return true;
+			}
+		}
+		//if (action.getClass().getName().equals("ghidra.app.plugin.core.script.ScriptAction")) {
+		//	return false;
+		//}
+		return false;
+	}
+
 	/**
 	 * A utility method to get all key binding actions.  This method will
 	 * only return actions that support {@link KeyBindingType key bindings}.
@@ -472,7 +490,8 @@ public class KeyBindingUtils {
 			LazyMap.lazyMap(new HashMap<>(), s -> new LinkedList<>());
 		Set<DockingActionIf> actions = tool.getAllActions();
 		for (DockingActionIf action : actions) {
-			if (isIgnored(action)) {
+			// Ghidra Mod - Allow partial override for KeyBindings
+			if (isIgnored2(action)) {
 				// don't bother tracking non-keybinding actions; this would be a mistake due
 				// to the potential for a shared key binding action overwriting its
 				// SharedStubKeyBindingAction
