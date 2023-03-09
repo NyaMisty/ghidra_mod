@@ -172,6 +172,11 @@ public class KeyBindings {
 			}
 			removeFromKeyMap(fullName, currentKs);
 		}
+
+		// Ghidra Mod - MetaCtrlFix - Canonicalize Meta
+		// Must do this after equal check
+		newKs = KeyBindingUtils.convertMetaCtrlKeyStroke(newKs, KeyBindingUtils.UNIFY_CTRL);
+
 		addActionKeyStroke(fullName, newKs);
 
 		ActionKeyBindingState info = actionInfoByFullName.get(fullName);
