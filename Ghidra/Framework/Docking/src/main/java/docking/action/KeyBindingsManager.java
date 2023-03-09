@@ -18,12 +18,15 @@ package docking.action;
 import java.awt.event.InputEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
+import java.security.InvalidParameterException;
 import java.util.*;
 
 import javax.swing.Action;
 import javax.swing.KeyStroke;
 
 import docking.*;
+import docking.actions.KeyBindingUtils;
+import generic.test.TestUtils;
 import generic.util.action.ReservedKeyBindings;
 import ghidra.util.exception.AssertException;
 
@@ -87,6 +90,9 @@ public class KeyBindingsManager implements PropertyChangeListener {
 		doAddKeyBinding(provider, action, keyStroke);
 
 		fixupAltGraphKeyStrokeMapping(provider, action, keyStroke);
+		// Ghidra Mod - MetaCtrlFix
+		//    We don't do here, because ctrl-XXX and meta-XXX can often have collision, and MultipleKeyAction keeps failing
+		//fixupMetaCtrlKeyStrokeMapping(provider, action, keyStroke);
 	}
 
 	private void fixupAltGraphKeyStrokeMapping(ComponentProvider provider, DockingActionIf action,
@@ -112,7 +118,54 @@ public class KeyBindingsManager implements PropertyChangeListener {
 		doAddKeyBinding(provider, action, keyStroke, keyStroke);
 	}
 
+	// Ghidra Mod - MetaCtrlFix - Remap Meta and Ctrl
 	private void doAddKeyBinding(ComponentProvider provider, DockingActionIf action,
+								 KeyStroke mappingKeyStroke, KeyStroke actionKeyStroke) {
+		// We can't do this because we goes through addKeyBinding, which calls doAddKeyBinding twice
+		//  and we changed action.getKeyBinding() in between
+		//if (action.getKeyBinding() != actionKeyStroke) {
+		//	throw new InvalidParameterException("action.getKeyBinding() != actionKeyStroke");
+		//}
+		// We instead re-define actionKeyStroke to ensure it's latest
+		actionKeyStroke = action.getKeyBinding();
+
+		// Before we do anything, we MUST firstly canoncalize
+		actionKeyStroke = KeyBindingUtils.convertMetaCtrlKeyStroke(actionKeyStroke, KeyBindingUtils.UNIFY_CTRL);
+		if (action.getKeyBinding() != actionKeyStroke) {
+			// Keystroke Changed, we need to also update the action keybinding data, or MultipleKeyAction complains
+
+			// Can't do this because it will do firePropertyChange
+			//action.setKeyBindingData(new KeyBindingData(actionKeyStroke, action.getKeyBindingData().getKeyBindingPrecedence()));
+			DockingAction realAction = null;
+			if (action instanceof DockingActionProxy) {
+				realAction = (DockingAction) ((DockingActionProxy) action).getAction();
+			} else if (action instanceof DockingAction) {
+				realAction = (DockingAction) action;
+			} else {
+				throw new InvalidParameterException("Unknown DockingAction: " + realAction);
+			}
+
+			// Can't do this because it will affect defaultKeyBindingData
+			//KeyBindingData kbData = action.getKeyBindingData();
+			//TestUtils.setInstanceField("keyStroke", kbData, action);
+			var newKbData = new KeyBindingData(actionKeyStroke, action.getKeyBindingData().getKeyBindingPrecedence());
+			TestUtils.setInstanceField("keyBindingData", realAction, newKbData);
+		}
+
+		// processing mappingKeyStroke, which is the actual keybinding
+		if (!KeyBindingUtils.isMetaCtrlKeyStroke(mappingKeyStroke)) {
+			// not meta/ctrl, ignoring
+			doAddKeyBinding_(provider, action, mappingKeyStroke, actionKeyStroke);
+		} else {
+			// is meta/ctrl, bind to both meth & ctrl
+			mappingKeyStroke = KeyBindingUtils.convertMetaCtrlKeyStroke(mappingKeyStroke, InputEvent.META_DOWN_MASK);
+			doAddKeyBinding_(provider, action, mappingKeyStroke, actionKeyStroke);
+			mappingKeyStroke = KeyBindingUtils.convertMetaCtrlKeyStroke(mappingKeyStroke, InputEvent.CTRL_DOWN_MASK);
+			doAddKeyBinding_(provider, action, mappingKeyStroke, actionKeyStroke);
+		}
+	}
+
+	private void doAddKeyBinding_(ComponentProvider provider, DockingActionIf action,
 			KeyStroke mappingKeyStroke, KeyStroke actionKeyStroke) {
 
 		DockingKeyBindingAction existingAction = dockingKeyMap.get(mappingKeyStroke);

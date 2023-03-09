@@ -974,4 +974,31 @@ public class KeyBindingUtils {
 		fileChooser.dispose();
 		return selectedFile;
 	}
+
+	// Ghidra Mod - MetaCtrlFix - Detect Meta&Ctrl
+	public static final int UNIFY_CTRL = InputEvent.META_DOWN_MASK;
+	public static final int META_CTRL_MASK = InputEvent.META_MASK | InputEvent.CTRL_MASK | InputEvent.META_DOWN_MASK | InputEvent.CTRL_DOWN_MASK;
+	public static boolean isMetaCtrlKeyStroke(KeyStroke keyStroke) {
+		if (keyStroke == null) {
+			return false;
+		}
+		int modifiers = keyStroke.getModifiers();
+		return (modifiers & KeyBindingUtils.META_CTRL_MASK) != 0;
+	}
+
+	// Ghidra Mod - MetaCtrlFix - Convert Meta&Ctrl
+	public static KeyStroke convertMetaCtrlKeyStroke(KeyStroke keyStroke, int ctrlMask) {
+		if (keyStroke == null) {
+			return keyStroke;
+		}
+		int modifiers = keyStroke.getModifiers();
+		if ((modifiers & KeyBindingUtils.META_CTRL_MASK) != 0) {
+			int newModifiers = (modifiers & ~KeyBindingUtils.META_CTRL_MASK) | ctrlMask;
+			KeyStroke updateKeyStroke =
+					KeyStroke.getKeyStroke(keyStroke.getKeyCode(), newModifiers, keyStroke.isOnKeyRelease());
+			updateKeyStroke = KeyBindingUtils.validateKeyStroke(updateKeyStroke);
+			return updateKeyStroke;
+		}
+		return keyStroke;
+	}
 }

@@ -123,6 +123,10 @@ public class KeyBindingsPanel extends JPanel {
 			return;
 		}
 
+		// Ghidra Mod - MetaCtrlFix - Canonicalize Meta
+		// Must check after Objects.equals or MultpleKeyAction will complain
+		newKeyStroke = KeyBindingUtils.convertMetaCtrlKeyStroke(newKeyStroke, KeyBindingUtils.UNIFY_CTRL);;
+
 		options.setKeyStroke(fullActionName, newKeyStroke);
 		originalValues.put(fullActionName, newKeyStroke);
 		keyStrokesByFullName.put(fullActionName, newKeyStroke);
@@ -576,6 +580,9 @@ public class KeyBindingsPanel extends JPanel {
 			if (!keyStrokesByFullName.containsKey(name)) {
 				continue;
 			}
+
+			// Ghidra Mod - MetaCtrlFix - Canonicalize Meta
+			keyStroke = KeyBindingUtils.convertMetaCtrlKeyStroke(keyStroke, KeyBindingUtils.UNIFY_CTRL);
 
 			// check to see if the key stroke results in a change and
 			// record that value
