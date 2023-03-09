@@ -184,7 +184,7 @@ bool Address::isContiguous(int4 sz,const Address &loaddr,int4 losz) const
 }
 
 /// If \b this is (originally) a \e join address, reevaluate it in terms of its new
-/// \e offset and \e siz, changing the space and offset if necessary.
+/// \e offset and \e size, changing the space and offset if necessary.
 /// \param size is the new size in bytes of the underlying object
 void Address::renormalize(int4 size) {
   if (base->getType() == IPTR_JOIN)

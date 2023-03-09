@@ -64,12 +64,11 @@ if "%IS_ADMIN%"=="NO" (
 	if "%OPTION%"=="restart" goto adminFail
 )
 
-set APP_NAME=ghidraSvr
-set APP_LONG_NAME=Ghidra Server
-
-set MODULE_DIR=Ghidra\Features\GhidraServer
-
-set WRAPPER_NAME_PREFIX=yajsw
+set "APP_NAME=ghidraSvr"
+set "APP_LONG_NAME=Ghidra Server"
+set "MODULE_DIR=Ghidra\Features\GhidraServer"
+set "WRAPPER_NAME_PREFIX=yajsw"
+set "wrapper_tmpdir=%TEMP%"
 
 if exist "%SERVER_DIR%\..\Ghidra\" goto normal
 
@@ -77,12 +76,19 @@ rem NOTE: If adjusting JAVA command assignment - do not attempt to add parameter
 
 rem NOTE: Variables that get accessed in server.conf must be lowercase
 
-rem Development Environment
+rem Development Environment (Eclipse classes or "gradle jar")
 set "ghidra_home=%SERVER_DIR%\..\..\..\.."
 set "WRAPPER_CONF=%SERVER_DIR%\..\..\Common\server\server.conf"
 set "DATA_DIR=%ghidra_home%\%MODULE_DIR%\build\data"
 set "classpath_frag=%ghidra_home%\%MODULE_DIR%\build\dev-meta\classpath.frag"
 set "LS_CPATH=%ghidra_home%\GhidraBuild\LaunchSupport\bin\main"
+if not exist "%LS_CPATH%" (
+	set "LS_CPATH=%ghidra_home%\GhidraBuild\LaunchSupport\build\libs\LaunchSupport.jar"
+)
+if not exist "%LS_CPATH%" (
+	set ERROR=ERROR: Cannot launch from repo because Ghidra has not been compiled with Eclipse or Gradle.
+	goto reportError
+)
 
 goto lab1
 
@@ -137,31 +143,34 @@ if "%JAVA_HOME%" == "" (
 rem reestablish JAVA path based upon final JAVA_HOME
 set "java=%JAVA_HOME%\bin\java.exe"
 
+set VMARGS=-Djava.io.tmpdir="%wrapper_tmpdir%"
+set VMARGS=%VMARGS% -Djna_tmpdir="%wrapper_tmpdir%"
+
 :: set DEBUG=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:18888
 
 if "%OPTION%"=="console" (
-	start "%APP_LONG_NAME%" "%java%" %DEBUG% -jar "%WRAPPER_HOME%/wrapper.jar" -c "%WRAPPER_CONF%"
+	start "%APP_LONG_NAME%" "%java%" %VMARGS% %DEBUG% -jar "%WRAPPER_HOME%/wrapper.jar" -c "%WRAPPER_CONF%"
 	echo Use Ctrl-C in Ghidra Console to terminate...
 	
 ) else if "%OPTION%"=="status" (
-	"%java%" -jar "%WRAPPER_HOME%/wrapper.jar" -q "%WRAPPER_CONF%"
+	"%java%" %VMARGS% -jar "%WRAPPER_HOME%/wrapper.jar" -q "%WRAPPER_CONF%"
 
 ) else if "%OPTION%"=="start" (
-	"%java%" %DEBUG% -jar "%WRAPPER_HOME%/wrapper.jar" -t "%WRAPPER_CONF%"
+	"%java%" %VMARGS% %DEBUG% -jar "%WRAPPER_HOME%/wrapper.jar" -t "%WRAPPER_CONF%"
 
 ) else if "%OPTION%"=="stop" (
-	"%java%" -jar "%WRAPPER_HOME%/wrapper.jar" -p "%WRAPPER_CONF%"
+	"%java%" %VMARGS% -jar "%WRAPPER_HOME%/wrapper.jar" -p "%WRAPPER_CONF%"
 
 ) else if "%OPTION%"=="restart" (
-	"%java%" -jar "%WRAPPER_HOME%/wrapper.jar" -p "%WRAPPER_CONF%"
-	"%java%" -jar "%WRAPPER_HOME%/wrapper.jar" -t "%WRAPPER_CONF%"
+	"%java%" %VMARGS% -jar "%WRAPPER_HOME%/wrapper.jar" -p "%WRAPPER_CONF%"
+	"%java%" %VMARGS% -jar "%WRAPPER_HOME%/wrapper.jar" -t "%WRAPPER_CONF%"
 
 ) else if "%OPTION%"=="install" (
-	"%java%" -jar "%WRAPPER_HOME%/wrapper.jar" -i "%WRAPPER_CONF%"
-	"%java%" -jar "%WRAPPER_HOME%/wrapper.jar" -t "%WRAPPER_CONF%"
+	"%java%" %VMARGS% -jar "%WRAPPER_HOME%/wrapper.jar" -i "%WRAPPER_CONF%"
+	"%java%" %VMARGS% -jar "%WRAPPER_HOME%/wrapper.jar" -t "%WRAPPER_CONF%"
 	
 ) else if "%OPTION%"=="uninstall" (
-	"%java%" -jar "%WRAPPER_HOME%/wrapper.jar" -r "%WRAPPER_CONF%"
+	"%java%" %VMARGS% -jar "%WRAPPER_HOME%/wrapper.jar" -r "%WRAPPER_CONF%"
 
 ) else (
 	goto usage

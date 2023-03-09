@@ -1343,6 +1343,8 @@ void FlowInfo::doInjection(InjectPayload *payload,InjectContext &icontext,PcodeO
 
   bool startbasic = op->isBlockStart();
   ++iter;			// Now points to first op in the injection
+  if (iter == obank.endDead())
+    throw LowlevelError("Empty injection: " + payload->getName());
   PcodeOp *firstop = *iter;
   bool isfallthru = true;
   PcodeOp *lastop = xrefControlFlow(iter,startbasic,isfallthru,fc);
@@ -1568,9 +1570,14 @@ void FlowInfo::checkMultistageJumptables(void)
   }  
 }
 
-/// \brief Recover jumptables for current set of BRANCHIND ops using existing flow
+/// \brief Recover jumptables for the current set of BRANCHIND ops using existing flow
 ///
-/// \param newTables will hold one JumpTable pointer for each BRANCHIND in \b tablelist
+/// This method passes back a list of JumpTable objects, one for each BRANCHIND in the current
+/// \b tablelist where the jumptable can be recovered. If a particular BRANCHIND cannot be recovered
+/// because the current partial control flow cannot legally reach it, the BRANCHIND is passed back
+/// in a separate list.
+/// \param newTables will hold the list of recovered JumpTables
+/// \param notreached will hold the list of BRANCHIND ops that could not be reached
 void FlowInfo::recoverJumpTables(vector<JumpTable *> &newTables,vector<PcodeOp *> &notreached)
 
 {

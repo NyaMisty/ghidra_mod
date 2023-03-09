@@ -21,8 +21,6 @@ import java.util.*;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 
-import com.google.common.collect.Collections2;
-
 import db.DBRecord;
 import ghidra.program.database.function.OverlappingFunctionException;
 import ghidra.program.model.address.*;
@@ -244,17 +242,18 @@ public class DBTraceFunctionSymbol extends DBTraceNamespaceSymbol
 		if (!foundBadVariables) {
 			return;
 		}
-		List<AbstractDBTraceVariableSymbol> badns = new ArrayList<>();
-		badns.addAll(Collections2.filter(manager.allLocals.getChildren(this),
-			DBTraceFunctionSymbol::isBadVariable));
+		List<? extends AbstractDBTraceVariableSymbol> badns = manager.allLocals.getChildren(this)
+				.stream()
+				.filter(DBTraceFunctionSymbol::isBadVariable)
+				.toList();
 		if (badns.isEmpty()) {
 			return;
 		}
 		DBTraceBookmarkType errType =
 			manager.trace.getBookmarkManager().getOrDefineBookmarkType(BookmarkType.ERROR);
 		manager.trace.getBookmarkManager()
-				.addBookmark(getLifespan(), entryPoint, errType,
-					"Bad Variables Removed", "Removed " + badns.size() + " bad variables");
+				.addBookmark(getLifespan(), entryPoint, errType, "Bad Variables Removed",
+					"Removed " + badns.size() + " bad variables");
 		for (AbstractDBTraceVariableSymbol s : badns) {
 			s.delete();
 		}
@@ -366,9 +365,9 @@ public class DBTraceFunctionSymbol extends DBTraceNamespaceSymbol
 			}
 			this.callFixup = newCallFixup;
 			update(FIXUP_COLUMN);
-			manager.trace.setChanged(
-				new TraceChangeRecord<>(TraceFunctionChangeType.CHANGED_CALL_FIXUP, getSpace(),
-					this, oldCallFixup, newCallFixup));
+			manager.trace
+					.setChanged(new TraceChangeRecord<>(TraceFunctionChangeType.CHANGED_CALL_FIXUP,
+						getSpace(), this, oldCallFixup, newCallFixup));
 		}
 	}
 
@@ -498,8 +497,8 @@ public class DBTraceFunctionSymbol extends DBTraceNamespaceSymbol
 			}
 			StringBuilder sb = new StringBuilder();
 			DBTraceParameterSymbol retVar = getReturn();
-			sb.append((formalSignature ? retVar.getFormalDataType()
-					: retVar.getDataType()).getDisplayName());
+			sb.append((formalSignature ? retVar.getFormalDataType() : retVar.getDataType())
+					.getDisplayName());
 			sb.append(' ');
 			if (includeCallingConvention && hasExplicitCallingConvention()) {
 				String cc = getCallingConventionName();
@@ -1451,7 +1450,7 @@ public class DBTraceFunctionSymbol extends DBTraceNamespaceSymbol
 			into.addAll(from);
 		}
 		else {
-			into.addAll(Collections2.filter(from, filter::matches));
+			from.stream().filter(v -> filter.matches(v)).forEach(into::add);
 		}
 	}
 
@@ -1626,9 +1625,9 @@ public class DBTraceFunctionSymbol extends DBTraceNamespaceSymbol
 			else {
 				andFlags(NO_RETURN_CLEAR);
 			}
-			manager.trace.setChanged(
-				new TraceChangeRecord<>(TraceFunctionChangeType.CHANGED_NORETURN, getSpace(), this,
-					!hasNoReturn, hasNoReturn));
+			manager.trace
+					.setChanged(new TraceChangeRecord<>(TraceFunctionChangeType.CHANGED_NORETURN,
+						getSpace(), this, !hasNoReturn, hasNoReturn));
 		}
 	}
 
@@ -1741,7 +1740,7 @@ public class DBTraceFunctionSymbol extends DBTraceNamespaceSymbol
 			if (DBTraceSymbolManager.DEFAULT_CALLING_CONVENTION_ID == callingConventionID) {
 				return cs.getDefaultCallingConvention();
 			}
-			String ccName = manager.callingConventionMap.inverse().get(callingConventionID);
+			String ccName = manager.callingConventionMap.getKey(callingConventionID);
 			if (ccName == null) {
 				return null;
 			}
@@ -1758,7 +1757,7 @@ public class DBTraceFunctionSymbol extends DBTraceNamespaceSymbol
 			if (DBTraceSymbolManager.DEFAULT_CALLING_CONVENTION_ID == callingConventionID) {
 				return DBTraceSymbolManager.DEFAULT_CALLING_CONVENTION_NAME;
 			}
-			return manager.callingConventionMap.inverse().get(callingConventionID);
+			return manager.callingConventionMap.getKey(callingConventionID);
 		}
 	}
 
@@ -1833,7 +1832,9 @@ public class DBTraceFunctionSymbol extends DBTraceNamespaceSymbol
 			// NOTE: Check for existence first, to avoid resolving unnecessarily.
 			// TODO: If ever struct-class are strongly related, fix that here, too.
 			classStruct = VariableUtilities.findOrCreateClassStruct((GhidraClass) parentNS, dtm);
-			dtm.resolve(classStruct, null);
+			if (classStruct != null) {
+				dtm.resolve(classStruct, null);
+			}
 		}
 	}
 
@@ -1858,8 +1859,7 @@ public class DBTraceFunctionSymbol extends DBTraceNamespaceSymbol
 	}
 
 	private List<Address> getFunctionThunkAddresses(long functionKey, boolean recursive) {
-		Collection<DBTraceFunctionSymbol> thunkSymbols =
-			manager.functionsByThunked.get(getKey());
+		Collection<DBTraceFunctionSymbol> thunkSymbols = manager.functionsByThunked.get(getKey());
 		if (thunkSymbols == null || thunkSymbols.isEmpty()) {
 			return null;
 		}
@@ -1916,8 +1916,7 @@ public class DBTraceFunctionSymbol extends DBTraceNamespaceSymbol
 		try (LockHold hold = LockHold.lock(manager.lock.readLock())) {
 			Set<Function> result = new HashSet<>();
 			for (DBTraceReference ref : manager.trace.getReferenceManager()
-					.getReferencesToRange(
-						lifespan, new AddressRangeImpl(entryPoint, entryPoint))) {
+					.getReferencesToRange(lifespan, new AddressRangeImpl(entryPoint, entryPoint))) {
 				if (monitor.isCancelled()) {
 					break;
 				}
@@ -1942,8 +1941,7 @@ public class DBTraceFunctionSymbol extends DBTraceNamespaceSymbol
 			Set<Function> result = new HashSet<>();
 			for (AddressRange rng : getBody()) {
 				for (DBTraceReference ref : manager.trace.getReferenceManager()
-						.getReferencesFromRange(
-							lifespan, rng)) {
+						.getReferencesFromRange(lifespan, rng)) {
 					if (monitor.isCancelled()) {
 						return result;
 					}
@@ -1971,9 +1969,11 @@ public class DBTraceFunctionSymbol extends DBTraceNamespaceSymbol
 	@Override
 	public void promoteLocalUserLabelsToGlobal() {
 		try (LockHold hold = LockHold.lock(manager.lock.writeLock())) {
-			List<DBTraceLabelSymbol> toPromote =
-				new ArrayList<>(Collections2.filter(manager.labels().getChildren(this),
-					l -> l.getSource() == SourceType.USER_DEFINED));
+			List<? extends DBTraceLabelSymbol> toPromote = manager.labels()
+					.getChildren(this)
+					.stream()
+					.filter(l -> l.getSource() == SourceType.USER_DEFINED)
+					.toList();
 			for (DBTraceLabelSymbol label : toPromote) {
 				try {
 					label.setNamespace(manager.getGlobalNamespace());
