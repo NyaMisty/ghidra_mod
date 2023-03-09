@@ -16,6 +16,8 @@
 package docking;
 
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.*;
@@ -24,6 +26,7 @@ import java.util.Map.Entry;
 
 import javax.swing.*;
 
+import docking.actions.KeyBindingUtils;
 import org.jdom.Element;
 
 import generic.util.WindowUtilities;
@@ -319,6 +322,26 @@ class DetachedWindowNode extends WindowNode {
 		return finalTitles;
 	}
 
+	// Ghidra Mod - Esc2Exit - Escape to exit on DetachedWindowNode
+	private void installEscapeAction() {
+		JComponent pane = null;
+		if (window instanceof JDialog) {
+			pane = ((JDialog) window).getRootPane();
+		} else if (window instanceof JFrame) {
+			pane = ((JFrame) window).getRootPane();
+		}
+		Action escAction = new AbstractAction("ESCAPE") {
+			@Override
+			public void actionPerformed(ActionEvent ev) {
+				close();
+			}
+		};
+		var ESC_KEYSTROKE = KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0);
+		KeyBindingUtils.registerAction(pane, ESC_KEYSTROKE, escAction,
+				JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
+
+	}
+
 	private boolean isForceModal(JComponent comp) {
 		if (comp instanceof DockableComponent) {
 			comp = ((DockableComponent)comp).getProviderComponent();
@@ -344,6 +367,7 @@ class DetachedWindowNode extends WindowNode {
 			window = createFrame();
 		}
 
+		installEscapeAction();
 		if (dropTargetFactory != null) {
 			dropTargetHandler = dropTargetFactory.createDropTargetHandler(window);
 		}
