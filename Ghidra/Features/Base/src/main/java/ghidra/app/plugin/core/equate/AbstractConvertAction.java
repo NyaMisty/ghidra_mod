@@ -71,6 +71,13 @@ public abstract class AbstractConvertAction extends ListingContextAction {
 			if (!(dataType instanceof AbstractIntegerDataType)) {
 				return false;
 			}
+
+			// GhidraMod - MultiKeyFix - Do not enable when format is already the same
+			AbstractIntegerDataType intType = (AbstractIntegerDataType) dataType;
+			int curChoice = FormatSettingsDefinition.DEF.getChoice(data);
+			if (curChoice == getFormatChoice() && intType.isSigned() == isSigned ) {
+				return false;
+			}
 		}
 		String menuName = getMenuName(context.getProgram(), scalar, cu instanceof Data);
 		if (menuName == null) {
