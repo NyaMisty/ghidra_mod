@@ -79,7 +79,7 @@ public abstract class CompositeEditorPanel extends JPanel
 
 	protected CompositeEditorProvider provider;
 	protected CompositeEditorModel model;
-	protected CompositeTable table;
+	protected GTable table;
 	private JLabel statusLabel;
 
 	private boolean editorAdjusting = false;
@@ -558,7 +558,7 @@ public abstract class CompositeEditorPanel extends JPanel
 	}
 
 	private void createTable() {
-		table = new CompositeTable(model);
+		table = new GTable(model);
 
 		TableColumnModel columnModel = table.getColumnModel();
 		if (columnModel instanceof GTableColumnModel) {
@@ -1235,9 +1235,10 @@ public abstract class CompositeEditorPanel extends JPanel
 	}
 
 	private class ComponentDataTypeCellEditor extends AbstractCellEditor
-			implements TableCellEditor {
+			implements TableCellEditor, FocusableEditor {
 
 		private DataTypeSelectionEditor editor;
+		private DropDownSelectionTextField<DataType> textField;
 		private DataType dt;
 		private int maxLength;
 		private boolean bitfieldAllowed;
@@ -1277,7 +1278,7 @@ public abstract class CompositeEditorPanel extends JPanel
 			editor.setPreferredDataTypeManager(originalDataTypeManager);
 			editor.setConsumeEnterKeyPress(false); // we want the table to handle Enter key presses
 
-			final DropDownSelectionTextField<DataType> textField = editor.getDropDownTextField();
+			textField = editor.getDropDownTextField();
 			textField.setBorder(UIManager.getBorder("Table.focusCellHighlightBorder"));
 			editor.addCellEditorListener(new CellEditorListener() {
 				@Override
@@ -1311,12 +1312,7 @@ public abstract class CompositeEditorPanel extends JPanel
 				}
 			});
 
-			editorPanel = new JPanel() {
-				@Override
-				public void requestFocus() {
-					textField.requestFocus();
-				}
-			};
+			editorPanel = new JPanel();
 			editorPanel.setLayout(new BorderLayout());
 			editorPanel.add(textField, BorderLayout.CENTER);
 			editorPanel.add(dataTypeChooserButton, BorderLayout.EAST);
@@ -1332,6 +1328,11 @@ public abstract class CompositeEditorPanel extends JPanel
 			else {
 				editor.cancelCellEditing();
 			}
+		}
+
+		@Override
+		public void focusEditor() {
+			boolean didFocus = textField.requestFocusInWindow();
 		}
 
 		@Override
@@ -1489,20 +1490,4 @@ public abstract class CompositeEditorPanel extends JPanel
 			e.consume();
 		}
 	}
-
-	class CompositeTable extends GTable {
-
-		public CompositeTable(TableModel dm) {
-			super(dm);
-		}
-
-		@Override
-		// overridden because the editor component was not being given focus
-		public Component prepareEditor(TableCellEditor editor, int row, int column) {
-			final Component component = super.prepareEditor(editor, row, column);
-			Swing.runLater(() -> component.requestFocus());
-			return component;
-		}
-	}
-
 }
