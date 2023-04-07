@@ -100,7 +100,7 @@ public class IndexMap {
 	 * @return The ByteBlockInfo object that contains the block and offset into that block
 	 * that is the resulting byte value.
 	 */
-	ByteBlockInfo getBlockInfo(BigInteger index, int fieldOffset) {
+	IndexedByteBlockInfo getBlockInfo(BigInteger index, int fieldOffset) {
 		SortedMap<BigInteger, BlockInfo> tailMap = blockInfoMap.tailMap(index);
 		if (tailMap.isEmpty()) {
 			return null;
@@ -109,7 +109,8 @@ public class IndexMap {
 		BigInteger byteIndex = index.multiply(bytesInLine).add(BigInteger.valueOf(fieldOffset));
 		if ((byteIndex.compareTo(blockInfo.blockStart) >= 0) &&
 			(byteIndex.compareTo(blockInfo.blockEnd) < 0)) {
-			return new ByteBlockInfo(blockInfo.block, byteIndex.subtract(blockInfo.blockStart));
+			return new IndexedByteBlockInfo(index, blockInfo.block,
+				byteIndex.subtract(blockInfo.blockStart), 0);
 		}
 		return null;
 	}
@@ -175,7 +176,7 @@ public class IndexMap {
 	 * except for the last line of a block which may end part way in the line.
 	 */
 	int getLastActiveFactoryIndex(BigInteger index, FieldFactory[] factories) {
-		for (int i = factories.length - 1; i > 0; i--) {
+		for (int i = factories.length - 1; i >= 0; i--) {
 			if (factories[i].isActive(index)) {
 				return i;
 			}
@@ -257,12 +258,12 @@ public class IndexMap {
 		while (iterator.hasNext()) {
 			BlockInfo next = iterator.next();
 			if (next.block == endBlock) {
-				break;
+				return byteBlocks;
 			}
 			byteBlocks.add(next.block);
 		}
-		return byteBlocks;
-
+		// didn't find the end, so the end must have been before the start, so return empty list
+		return List.of();
 	}
 
 }

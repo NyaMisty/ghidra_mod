@@ -227,10 +227,10 @@ public class FunctionEditorModel {
 				returnDataTypeSize + "-bytes)";
 			return false;
 		}
-		else if (storageSize > returnDataTypeSize) {
-			statusText = "Too much Return Storage (" + storageSize + "-bytes) for datatype (" +
-				returnDataTypeSize + "-bytes)";
-			return false;
+		else if (storageSize > returnDataTypeSize && storageSize <= 8 && returnDataTypeSize <= 8 &&
+			Undefined.isUndefined(returnInfo.getDataType())) {
+			// grow undefined type size if needed
+			returnInfo.setFormalDataType(Undefined.getUndefinedDataType(storageSize));
 		}
 		return true;
 	}
@@ -298,20 +298,20 @@ public class FunctionEditorModel {
 			return true; // don't constrain float storage size
 		}
 
-		int requiredSize = datatype.getLength();
+		int paramSize = datatype.getLength();
 
-		if (storageSize < requiredSize) {
+		if (storageSize < paramSize) {
 			statusText = "Insufficient storage (" + storageSize + "-bytes) for datatype (" +
-				requiredSize + "-bytes) assigned to parameter " + (param.getOrdinal() + 1);
+				paramSize + "-bytes) assigned to parameter " + (param.getOrdinal() + 1);
 			return false;
 		}
-		else if (requiredSize == 0) {
+		else if (paramSize == 0) {
 			// assume 0-sized structure which we need to allow
 		}
-		else if (storageSize > requiredSize) {
-			statusText = "Too much storage (" + storageSize + "-bytes) for datatype (" +
-				requiredSize + "-bytes) assigned to parameter " + (param.getOrdinal() + 1);
-			return false;
+		else if (storageSize > paramSize && storageSize <= 8 && paramSize <= 8 &&
+			Undefined.isUndefined(param.getDataType())) {
+			// grow undefined type size if needed
+			param.setFormalDataType(Undefined.getUndefinedDataType(storageSize));
 		}
 		return true;
 	}
@@ -642,8 +642,8 @@ public class FunctionEditorModel {
 				try {
 					if (autoParamCount < oldAutoCount) {
 						if (oldParams.get(autoParamCount)
-								.getStorage()
-								.getAutoParameterType() != storage.getAutoParameterType()) {
+							.getStorage()
+							.getAutoParameterType() != storage.getAutoParameterType()) {
 							adjustSelectionForRowRemoved(i);
 						}
 					}
@@ -1047,6 +1047,24 @@ public class FunctionEditorModel {
 		return true;
 	}
 
+	private FunctionSignature getFunctionSignature() {
+		FunctionDefinitionDataType funDt = new FunctionDefinitionDataType(name);
+		funDt.setReturnType(returnInfo.getFormalDataType());
+		List<ParameterDefinition> params = new ArrayList<>();
+
+		for (ParamInfo paramInfo : parameters) {
+			if (paramInfo.isAutoParameter()) {
+				continue;
+			}
+			String paramName = paramInfo.getName();
+			DataType paramDt = paramInfo.getFormalDataType();
+			params.add(new ParameterDefinitionImpl(paramName, paramDt, null));
+		}
+		funDt.setArguments(params.toArray(new ParameterDefinition[params.size()]));
+		funDt.setVarArgs(hasVarArgs);
+		return funDt;
+	}
+
 	Program getProgram() {
 		return program;
 	}
@@ -1170,7 +1188,7 @@ public class FunctionEditorModel {
 	public void parseSignatureFieldText() throws ParseException, CancelledException {
 		FunctionSignatureParser parser =
 			new FunctionSignatureParser(program.getDataTypeManager(), dataTypeManagerService);
-		FunctionDefinitionDataType f = parser.parse(function.getSignature(), signatureFieldText);
+		FunctionDefinitionDataType f = parser.parse(getFunctionSignature(), signatureFieldText);
 
 		setFunctionData(f);
 		isInParsingMode = false;

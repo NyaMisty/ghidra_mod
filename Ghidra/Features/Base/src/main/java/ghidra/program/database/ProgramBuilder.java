@@ -136,10 +136,10 @@ public class ProgramBuilder {
 		CompilerSpec compilerSpec = compilerSpecID == null ? language.getDefaultCompilerSpec()
 				: language.getCompilerSpecByID(new CompilerSpecID(compilerSpecID));
 		program = new ProgramDB(name, language, compilerSpec, consumer == null ? this : consumer);
-		setAnalyzed(true);
+		setAnalyzed();
 		program.setTemporary(true); // ignore changes
 	}
-	
+
 	/**
 	 * Construct program builder using a full language object rather than a language id string
 	 * @param name program name
@@ -150,7 +150,7 @@ public class ProgramBuilder {
 			throws Exception {
 		CompilerSpec compilerSpec = language.getDefaultCompilerSpec();
 		program = new ProgramDB(name, language, compilerSpec, this);
-		setAnalyzed(true);
+		setAnalyzed();
 		program.setTemporary(true); // ignore changes
 	}
 
@@ -281,10 +281,9 @@ public class ProgramBuilder {
 
 	/** 
 	 * This prevents the 'ask to analyze' dialog from showing when called with {@code true}
-	 * @param analyzed true to mark the program as analyzed
 	 */
-	public void setAnalyzed(boolean analyzed) {
-		GhidraProgramUtilities.setAnalyzedFlag(program, analyzed);
+	public void setAnalyzed() {
+		GhidraProgramUtilities.markProgramAnalyzed(program);
 	}
 
 	public MemoryBlock createMemory(String name, String address, int size) {
@@ -321,8 +320,8 @@ public class ProgramBuilder {
 
 		return tx(() -> {
 			return program.getMemory()
-					.createInitializedBlock(name, addr(address), size, (byte) 0, TaskMonitor.DUMMY,
-						true);
+				.createInitializedBlock(name, addr(address), size, (byte) 0, TaskMonitor.DUMMY,
+					true);
 		});
 	}
 
@@ -643,7 +642,7 @@ public class ProgramBuilder {
 
 	public void applyFixedLengthDataType(String addressString, DataType dt, int length) {
 		tx(() -> {
-			DataUtilities.createData(program, addr(addressString), dt, length, false,
+			DataUtilities.createData(program, addr(addressString), dt, length,
 				ClearDataMode.CLEAR_ALL_CONFLICT_DATA);
 		});
 	}
@@ -688,7 +687,7 @@ public class ProgramBuilder {
 			int previousDataLength = 0;
 			for (int i = 0; i < n; i++) {
 				address = address.addNoWrap(previousDataLength);
-				Data newStringInstance = DataUtilities.createData(program, address, dt, -1, false,
+				Data newStringInstance = DataUtilities.createData(program, address, dt, -1,
 					ClearDataMode.CLEAR_SINGLE_DATA);
 				previousDataLength = newStringInstance.getLength();
 			}
@@ -830,7 +829,7 @@ public class ProgramBuilder {
 			startTransaction();
 			try {
 				Data data = DataUtilities.createData(program, addr, dataType, stringBytes.length,
-					false, ClearDataMode.CLEAR_ALL_UNDEFINED_CONFLICT_DATA);
+					ClearDataMode.CLEAR_ALL_UNDEFINED_CONFLICT_DATA);
 				CharsetSettingsDefinition.CHARSET.setCharset(data, charset.name());
 				return data;
 			}

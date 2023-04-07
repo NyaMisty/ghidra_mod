@@ -13,17 +13,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package agent.dbgmodel.dbgmodel.err;
+package agent.dbgeng.dbgeng;
 
-/**
- * The base exception for unchecked {@code dbgmodel.dll} wrapper-related errors.
- */
-public class DbgModelRuntimeException extends RuntimeException {
-	public DbgModelRuntimeException() {
-		super();
+public record DebugSystemSessionRecord(long value) implements DebugSessionId {
+
+	@Override
+	public boolean isSystem() {
+		return true;
 	}
 
-	public DbgModelRuntimeException(String message) {
-		super(message);
+	@Override
+	public String id() {
+		return "SYS"+Long.toHexString(value);
+	}
+
+	@Override
+	public String toString() {
+		return "<dbgeng.dll System SYSID " + Long.toHexString(value) + ">";
 	}
 }

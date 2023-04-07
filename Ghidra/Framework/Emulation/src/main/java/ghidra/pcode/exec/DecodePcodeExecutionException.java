@@ -13,17 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package agent.dbgmodel.dbgmodel.err;
+package ghidra.pcode.exec;
 
-/**
- * The base exception for checked {@code dbgmodel.dll} wrapper-related errors.
- */
-public class DbgModelException extends Exception {
-	public DbgModelException() {
-		super();
+import ghidra.program.model.address.Address;
+
+public class DecodePcodeExecutionException extends PcodeExecutionException {
+	private final Address pc;
+
+	public DecodePcodeExecutionException(String message, Address pc) {
+		super(message.contains("PC=") ? message : "%s (PC=%s)".formatted(message, pc));
+		this.pc = pc;
 	}
 
-	public DbgModelException(String message) {
-		super(message);
+	public Address getProgramCounter() {
+		return pc;
 	}
 }

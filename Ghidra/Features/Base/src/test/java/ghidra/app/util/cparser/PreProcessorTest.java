@@ -117,7 +117,7 @@ public class PreProcessorTest extends AbstractGenericTest {
 	public void testDefines() throws Exception {
 		long value;
 		String defname;
-
+		
 		value = 32516;
 		defname = "DefVal1";
 		checkDefine(dtMgr, path, value, defname);
@@ -157,7 +157,87 @@ public class PreProcessorTest extends AbstractGenericTest {
 		value = ((0x7fff) * 900L / 1000);
 		defname = "DefVal10";
 		checkDefine(dtMgr, path, value, defname);
+		
+		value = 1;
+		defname = "DefVal_1L";
+		checkDefine(dtMgr, path, value, defname);
 
+		value = 2;
+		defname = "DefVal_2l";
+		checkDefine(dtMgr, path, value, defname);
+
+		value = 3;
+		defname = "DefVal_3U";
+		checkDefine(dtMgr, path, value, defname);
+		
+		value = 4;
+		defname = "DefVal_4u";
+		checkDefine(dtMgr, path, value, defname);
+		
+		value = 5;
+		defname = "DefVal_5UL";
+		checkDefine(dtMgr, path, value, defname);
+
+		value = 6;
+		defname = "DefVal_6ul";
+		checkDefine(dtMgr, path, value, defname);
+
+		value = 7;
+		defname = "DefVal_7lu";
+		checkDefine(dtMgr, path, value, defname);
+
+		value = 8;
+		defname = "DefVal_8llu";
+		checkDefine(dtMgr, path, value, defname);
+
+		value = 9;
+		defname = "DefVal_9ull";
+		checkDefine(dtMgr, path, value, defname);
+
+		value = 10;
+		defname = "DefVal_10ll";
+		checkDefine(dtMgr, path, value, defname);
+		
+		value = 1;
+		defname = "DefVal_P_1L";
+		checkDefine(dtMgr, path, value, defname);
+
+		value = 2;
+		defname = "DefVal_P_2l";
+		checkDefine(dtMgr, path, value, defname);
+
+		value = 3;
+		defname = "DefVal_P_3U";
+		checkDefine(dtMgr, path, value, defname);
+		
+		value = 4;
+		defname = "DefVal_P_4u";
+		checkDefine(dtMgr, path, value, defname);
+		
+		value = 5;
+		defname = "DefVal_P_5UL";
+		checkDefine(dtMgr, path, value, defname);
+
+		value = 6;
+		defname = "DefVal_P_6ul";
+		checkDefine(dtMgr, path, value, defname);
+
+		value = 7;
+		defname = "DefVal_P_7lu";
+		checkDefine(dtMgr, path, value, defname);
+
+		value = 8;
+		defname = "DefVal_P_8llu";
+		checkDefine(dtMgr, path, value, defname);
+
+		value = 9;
+		defname = "DefVal_P_9ull";
+		checkDefine(dtMgr, path, value, defname);
+
+		value = 10;
+		defname = "DefVal_P_10ll";
+		checkDefine(dtMgr, path, value, defname);
+		
 		value = 0;
 		defname = "TOO_MANY_FISH";
 		checkDefine(dtMgr, path, value, defname);

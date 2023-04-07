@@ -159,7 +159,8 @@ public class DefaultPcodeThread<T> implements PcodeThread<T> {
 		 * @param state the composite state assigned to the thread
 		 */
 		public PcodeThreadExecutor(DefaultPcodeThread<T> thread) {
-			super(thread.language, thread.arithmetic, thread.state, Reason.EXECUTE);
+			// NB. The executor itself is not decoding. So reads are in fact data reads.
+			super(thread.language, thread.arithmetic, thread.state, Reason.EXECUTE_READ);
 			this.thread = thread;
 		}
 
@@ -320,15 +321,19 @@ public class DefaultPcodeThread<T> implements PcodeThread<T> {
 	}
 
 	protected void branchToAddress(Address target) {
-		overrideCounter(target);
+		writeCounter(target);
 		decoder.branched(counter);
+	}
+
+	protected void writeCounter(Address counter) {
+		setCounter(counter);
+		state.setVar(pc,
+			arithmetic.fromConst(counter.getAddressableWordOffset(), pc.getMinimumByteSize()));
 	}
 
 	@Override
 	public void overrideCounter(Address counter) {
-		setCounter(counter);
-		state.setVar(pc,
-			arithmetic.fromConst(counter.getAddressableWordOffset(), pc.getMinimumByteSize()));
+		writeCounter(counter);
 	}
 
 	@Override
@@ -375,13 +380,13 @@ public class DefaultPcodeThread<T> implements PcodeThread<T> {
 
 	@Override
 	public void reInitialize() {
-		long offset = arithmetic.toLong(state.getVar(pc, executor.getReason()), Purpose.BRANCH);
+		long offset = arithmetic.toLong(state.getVar(pc, Reason.RE_INIT), Purpose.BRANCH);
 		setCounter(language.getDefaultSpace().getAddress(offset, true));
 
 		if (contextreg != Register.NO_CONTEXT) {
 			try {
-				BigInteger ctx = arithmetic.toBigInteger(state.getVar(
-					contextreg, executor.getReason()), Purpose.CONTEXT);
+				BigInteger ctx = arithmetic.toBigInteger(state.getVar(contextreg, Reason.RE_INIT),
+					Purpose.CONTEXT);
 				assignContext(new RegisterValue(contextreg, ctx));
 			}
 			catch (AccessPcodeExecutionException e) {
@@ -583,6 +588,11 @@ public class DefaultPcodeThread<T> implements PcodeThread<T> {
 	}
 
 	@Override
+	public boolean isSuspended() {
+		return executor.suspended;
+	}
+
+	@Override
 	public SleighLanguage getLanguage() {
 		return language;
 	}
@@ -677,8 +687,8 @@ public class DefaultPcodeThread<T> implements PcodeThread<T> {
 	}
 
 	/**
-	 * Notify the machine a thread has been stepped, so that it may re-enable software interrupts,
-	 * if applicable
+	 * Notify the machine a thread has been stepped a p-code op, so that it may re-enable software
+	 * interrupts, if applicable
 	 */
 	protected void stepped() {
 		machine.stepped();
