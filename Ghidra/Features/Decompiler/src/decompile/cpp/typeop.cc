@@ -15,6 +15,9 @@
  */
 #include "typeop.hh"
 #include "funcdata.hh"
+
+namespace ghidra {
+
 static void printBranchRelTarget(Architecture*, ostream&, const PcodeOp*);
 
 /// \param inst will hold the array of TypeOp objects, indexed on op-code
@@ -2362,3 +2365,5 @@ TypeOpLzcount::TypeOpLzcount(TypeFactory *t)
   opflags = PcodeOp::unary;
   behave = new OpBehaviorLzcount();
 }
+
+} // End namespace ghidra

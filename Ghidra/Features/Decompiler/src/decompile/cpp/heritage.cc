@@ -17,6 +17,8 @@
 #include "funcdata.hh"
 #include "prefersplit.hh"
 
+namespace ghidra {
+
 /// Update disjoint cover making sure (addr,size) is contained in a single element and return
 /// an iterator to this element. The element's \b pass number is set to be the smallest value
 /// of any previous intersecting element. Additionally an \b intersect code is passed back:
@@ -2704,3 +2706,5 @@ void Heritage::clear(void)
   pass = 0;
   phantomDeps.clear();
 }
+
+} // End namespace ghidra

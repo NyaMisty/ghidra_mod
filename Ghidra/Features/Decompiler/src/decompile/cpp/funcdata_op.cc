@@ -16,6 +16,8 @@
 #include "funcdata.hh"
 #include "flow.hh"
 
+namespace ghidra {
+
 // Funcdata members pertaining directly to ops
 
 /// \param op is the given PcodeOp
@@ -1419,3 +1421,5 @@ bool Funcdata::moveRespectingCover(PcodeOp *op,PcodeOp *lastOp)
   }
   return false;
 }
+
+} // End namespace ghidra
