@@ -24,6 +24,7 @@ import java.util.regex.Pattern;
 import org.apache.commons.lang3.StringUtils;
 
 import db.*;
+import db.util.ErrorHandler;
 import ghidra.program.database.*;
 import ghidra.program.database.code.CodeManager;
 import ghidra.program.database.external.ExternalManagerDB;
@@ -36,8 +37,8 @@ import ghidra.program.model.address.*;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.listing.*;
 import ghidra.program.model.symbol.*;
-import ghidra.program.util.ChangeManager;
 import ghidra.program.util.LanguageTranslator;
+import ghidra.program.util.ProgramEvent;
 import ghidra.util.*;
 import ghidra.util.exception.*;
 import ghidra.util.task.TaskMonitor;
@@ -63,6 +64,7 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 	private LabelHistoryAdapter historyAdapter;
 
 	private DBObjectCache<SymbolDB> cache;
+	private ErrorHandler errHandler;
 	private ProgramDB program;
 	private ReferenceDBManager refManager;
 	private NamespaceManager namespaceMgr;
@@ -81,22 +83,26 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 	 * @param handle the database handler
 	 * @param addrMap the address map.
 	 * @param openMode the open mode.
+	 * @param errHandler database error handler
 	 * @param lock the program synchronization lock
 	 * @param monitor the progress monitor used when upgrading.
 	 * @throws CancelledException if the user cancels the upgrade.
 	 * @throws IOException if a database io error occurs.
 	 * @throws VersionException if the database version doesn't match the current version.
 	 */
-	public SymbolManager(DBHandle handle, AddressMap addrMap, int openMode, Lock lock,
-			TaskMonitor monitor) throws CancelledException, IOException, VersionException {
+	public SymbolManager(DBHandle handle, AddressMap addrMap, int openMode, ErrorHandler errHandler,
+			Lock lock, TaskMonitor monitor)
+			throws CancelledException, IOException, VersionException {
 
 		this.addrMap = addrMap;
+		this.errHandler = errHandler;
 		this.lock = lock;
 		dynamicSymbolAddressMap = new AddressMapImpl((byte) 0x40, addrMap.getAddressFactory());
 		initializeAdapters(handle, openMode, monitor);
 		cache = new DBObjectCache<>(100);
 
-		variableStorageMgr = new VariableStorageManagerDB(handle, addrMap, openMode, lock, monitor);
+		variableStorageMgr =
+			new VariableStorageManagerDB(handle, addrMap, openMode, errHandler, lock, monitor);
 
 		if (openMode == DBConstants.UPGRADE &&
 			OldVariableStorageManagerDB.isOldVariableStorageManagerUpgradeRequired(handle)) {
@@ -140,7 +146,7 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 		this.program = program;
 		refManager = program.getReferenceManager();
 		namespaceMgr = program.getNamespaceManager();
-		variableStorageMgr.setProgram(program);
+		variableStorageMgr.setProgramArchitecture(program);
 	}
 
 	@Override
@@ -175,6 +181,14 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 				processOldVariableAddresses(monitor);
 			}
 		}
+	}
+
+	/**
+	 * Get the variable storage manager used by this symbol table
+	 * @return varable storage manager
+	 */
+	public VariableStorageManager getVariableStorageManager() {
+		return variableStorageMgr;
 	}
 
 	/**
@@ -229,7 +243,7 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 			adapter.getSymbols(AddressSpace.EXTERNAL_SPACE.getMinAddress(),
 				AddressSpace.EXTERNAL_SPACE.getMaxAddress(), true);
 		while (symbolRecordIterator.hasNext()) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			DBRecord rec = symbolRecordIterator.next();
 			rec.setByteValue(SymbolDatabaseAdapter.SYMBOL_TYPE_COL, SymbolType.LABEL.getID());
 			adapter.updateSymbolRecord(rec);
@@ -257,7 +271,7 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 
 		RecordIterator symbolRecordIterator = adapter.getSymbols();
 		while (symbolRecordIterator.hasNext()) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			monitor.setProgress(++cnt);
 			DBRecord rec = symbolRecordIterator.next();
 			long addr = rec.getLongValue(SymbolDatabaseAdapter.SYMBOL_ADDR_COL);
@@ -319,7 +333,7 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 			Address curVarAddr = null;
 			long curDataTypeId = -1;
 			while (recIter.hasNext()) {
-				monitor.checkCanceled();
+				monitor.checkCancelled();
 				DBRecord rec = recIter.next();
 				Address addr =
 					addrMap.decodeAddress(rec.getLongValue(SymbolDatabaseAdapter.SYMBOL_ADDR_COL));
@@ -345,8 +359,8 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 						Msg.warn(this, "Variable symbol upgrade problem: " + parent.getName() +
 							":" + rec.getString(SymbolDatabaseAdapter.SYMBOL_NAME_COL));
 						curVarAddr = null;
-						newVarAddr = variableStorageMgr.getVariableStorageAddress(
-							VariableStorage.BAD_STORAGE, true);
+						newVarAddr = variableStorageMgr
+								.getVariableStorageAddress(VariableStorage.BAD_STORAGE, true);
 					}
 				}
 
@@ -389,7 +403,7 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 
 		RecordIterator iter = table.iterator();
 		while (iter.hasNext()) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			DBRecord rec = iter.next();
 			Address addr = oldAddrMap.decodeAddress(rec.getKey());
 			refManager.addExternalEntryPointRef(addr);
@@ -420,7 +434,7 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 
 		RecordIterator iter = table.iterator();
 		while (iter.hasNext()) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			DBRecord rec = iter.next();
 			Address addr = oldAddrMap.decodeAddress(rec.getLongValue(OLD_SYMBOL_ADDR_COL));
 			Namespace namespace = namespaceMgr.getNamespaceContaining(addr);
@@ -489,9 +503,8 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 
 		Symbol symbol = getFirstSymbol(name, namespace, s -> !s.getSymbolType().allowsDuplicates());
 		if (symbol != null) {
-			throw new DuplicateNameException(
-				"A " + symbol.getSymbolType() + " symbol with name " + name +
-					" already exists in namespace " + symbol.getParentNamespace().getName());
+			throw new DuplicateNameException("A " + symbol.getSymbolType() + " symbol with name " +
+				name + " already exists in namespace " + symbol.getParentNamespace().getName());
 		}
 	}
 
@@ -513,9 +526,8 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 			Address address = symbol.getAddress();
 			symbolRemoved(symbol, address, symbol.getName(), oldKey, Namespace.GLOBAL_NAMESPACE_ID,
 				null);
-			DBRecord record =
-				adapter.createSymbol(newName, address, newParentID, SymbolType.LABEL, null,
-					null, null, source, true);
+			DBRecord record = adapter.createSymbol(newName, address, newParentID, SymbolType.LABEL,
+				null, null, null, source, true);
 			symbol.setRecord(record);
 			symbolAdded(symbol);
 		}
@@ -660,9 +672,7 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 		while (symIt.hasNext()) {
 			list.add(symIt.next());
 		}
-		Iterator<Symbol> it = list.iterator();
-		while (it.hasNext()) {
-			Symbol s = it.next();
+		for (Symbol s : list) {
 			s.delete();
 		}
 	}
@@ -1512,9 +1522,7 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 					DBRecord rec = iter.next();
 					symbols.add(getSymbol(rec));
 				}
-				Iterator<SymbolDB> it = symbols.iterator();
-				while (it.hasNext()) {
-					SymbolDB s = it.next();
+				for (SymbolDB s : symbols) {
 					s.delete();
 				}
 			}
@@ -1534,34 +1542,33 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 			createLabelHistoryRecord(addr, oldName, newName, LabelHistory.RENAME);
 		}
 
-		program.symbolChanged(symbol, ChangeManager.DOCR_SYMBOL_RENAMED, addr, symbol, oldName,
-			newName);
+		program.symbolChanged(symbol, ProgramEvent.SYMBOL_RENAMED, addr, symbol, oldName, newName);
 	}
 
 	void symbolNamespaceChanged(Symbol symbol, Namespace oldParentNamespace) {
-		program.symbolChanged(symbol, ChangeManager.DOCR_SYMBOL_SCOPE_CHANGED, symbol.getAddress(),
+		program.symbolChanged(symbol, ProgramEvent.SYMBOL_SCOPE_CHANGED, symbol.getAddress(),
 			symbol, oldParentNamespace, symbol.getParentNamespace());
 	}
 
 	void primarySymbolSet(Symbol symbol, Symbol oldPrimarySymbol) {
 		// fire event: old Value = symbol address, new value = reference address
-		program.symbolChanged(symbol, ChangeManager.DOCR_SYMBOL_SET_AS_PRIMARY, symbol.getAddress(),
-			null, oldPrimarySymbol, symbol);
+		program.symbolChanged(symbol, ProgramEvent.SYMBOL_PRIMARY_STATE_CHANGED,
+			symbol.getAddress(), null, oldPrimarySymbol, symbol);
 	}
 
 	void symbolSourceChanged(Symbol symbol) {
-		program.symbolChanged(symbol, ChangeManager.DOCR_SYMBOL_SOURCE_CHANGED, symbol.getAddress(),
+		program.symbolChanged(symbol, ProgramEvent.SYMBOL_SOURCE_CHANGED, symbol.getAddress(),
 			symbol, null, null);
 	}
 
 	void symbolAnchoredFlagChanged(Symbol symbol) {
-		program.symbolChanged(symbol, ChangeManager.DOCR_SYMBOL_ANCHORED_FLAG_CHANGED,
-			symbol.getAddress(), symbol, null, null);
+		program.symbolChanged(symbol, ProgramEvent.SYMBOL_ANCHOR_FLAG_CHANGED, symbol.getAddress(),
+			symbol, null, null);
 	}
 
 	void symbolDataChanged(Symbol symbol) {
-		program.symbolChanged(symbol, ChangeManager.DOCR_SYMBOL_DATA_CHANGED, symbol.getAddress(),
-			symbol, null, null);
+		program.symbolChanged(symbol, ProgramEvent.SYMBOL_DATA_CHANGED, symbol.getAddress(), symbol,
+			null, null);
 	}
 
 	SymbolDatabaseAdapter getDatabaseAdapter() {
@@ -1579,7 +1586,7 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 	}
 
 	void dbError(IOException e) {
-		program.dbError(e);
+		errHandler.dbError(e);
 	}
 
 	void validateSource(String name, Address address, SymbolType symbolType, SourceType source) {
@@ -1600,7 +1607,7 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 		refManager.symbolAdded(symbol);
 
 		// fire event
-		program.symbolAdded(symbol, ChangeManager.DOCR_SYMBOL_ADDED, addr, null, symbol);
+		program.symbolAdded(symbol, ProgramEvent.SYMBOL_ADDED, addr, null, symbol);
 	}
 
 	private void symbolRemoved(Symbol symbol, Address addr, String name, long symbolID,
@@ -1613,12 +1620,11 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 		}
 
 		// fire event
-		program.symbolChanged(symbol, ChangeManager.DOCR_SYMBOL_REMOVED, addr, symbol, name,
-			symbolID);
+		program.symbolChanged(symbol, ProgramEvent.SYMBOL_REMOVED, addr, symbol, name, symbolID);
 	}
 
 	void externalEntryPointRemoved(Address addr) {
-		program.setChanged(ChangeManager.DOCR_EXTERNAL_ENTRY_POINT_REMOVED, addr, addr, null, null);
+		program.setChanged(ProgramEvent.EXTERNAL_ENTRY_REMOVED, addr, addr, null, null);
 	}
 
 	private void createLabelHistoryRecord(Address address, String oldName, String name,
@@ -2199,7 +2205,7 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 		variableStorageMgr.setLanguage(translator, monitor);
 	}
 
-	public void replaceDataTypes(long oldDataTypeID, long newDataTypeID) {
+	public void replaceDataTypes(Map<Long, Long> dataTypeReplacementMap) {
 		lock.acquire();
 		try {
 			RecordIterator it = adapter.getSymbols();
@@ -2228,8 +2234,9 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 					}
 				}
 				long id = rec.getLongValue(SymbolDatabaseAdapter.SYMBOL_DATATYPE_COL);
-				if (id == oldDataTypeID) {
-					rec.setLongValue(SymbolDatabaseAdapter.SYMBOL_DATATYPE_COL, newDataTypeID);
+				Long replacementId = dataTypeReplacementMap.get(id);
+				if (replacementId != null) {
+					rec.setLongValue(SymbolDatabaseAdapter.SYMBOL_DATATYPE_COL, replacementId);
 					adapter.updateSymbolRecord(rec);
 					symbolDataChanged(getSymbol(rec));
 				}
@@ -2486,9 +2493,8 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 		}
 		else {
 			try {
-				Symbol newLabel =
-					createLabel(newAddress, symbol.getName(), symbol.getParentNamespace(),
-						symbol.getSource());
+				Symbol newLabel = createLabel(newAddress, symbol.getName(),
+					symbol.getParentNamespace(), symbol.getSource());
 				newLabel.setPinned(true);
 			}
 			catch (InvalidInputException e) {
@@ -2669,8 +2675,8 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 			return classNamespace;
 		}
 		catch (DuplicateNameException | InvalidInputException | CircularDependencyException e) {
-			throw new AssertException("Unexpected exception creating class from namespace: " +
-				e.getMessage(), e);
+			throw new AssertException(
+				"Unexpected exception creating class from namespace: " + e.getMessage(), e);
 		}
 		finally {
 			lock.release();
@@ -2939,9 +2945,8 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 		// delete any promoted symbol, dynamic symbol, and make sure all others are not primary
 		cleanUpSymbols(addr, symbolToPromote, primary);
 
-		Symbol symbol =
-			doCreateSymbol(name, addr, namespace, SymbolType.FUNCTION, stringData, null, null,
-				source, true);
+		Symbol symbol = doCreateSymbol(name, addr, namespace, SymbolType.FUNCTION, stringData, null,
+			null, source, true);
 
 		if (needsPinning) {
 			symbol.setPinned(true);
@@ -3009,9 +3014,8 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 			boolean isPrimary) {
 
 		try {
-			DBRecord record =
-				adapter.createSymbol(name, addr, namespace.getID(), type, stringData, dataTypeId,
-					variableOffset, source, isPrimary);
+			DBRecord record = adapter.createSymbol(name, addr, namespace.getID(), type, stringData,
+				dataTypeId, variableOffset, source, isPrimary);
 
 			SymbolDB newSymbol = makeSymbol(addr, record, type);
 			symbolAdded(newSymbol);
@@ -3023,8 +3027,7 @@ public class SymbolManager implements SymbolTable, ManagerDB {
 		return null;
 	}
 
-	private String validateName(String name, SourceType source)
-			throws InvalidInputException {
+	private String validateName(String name, SourceType source) throws InvalidInputException {
 		if (source == SourceType.DEFAULT) {
 			return "";
 		}

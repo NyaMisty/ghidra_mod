@@ -98,6 +98,8 @@ interface InternalTraceObjectValue extends TraceObjectValue {
 		protected abstract InternalTraceObjectValue create(Lifespan range, Object value);
 	}
 
+	void doSetPrimitive(Object primitive);
+
 	DBTraceObjectManager getManager();
 
 	/**
@@ -135,12 +137,15 @@ interface InternalTraceObjectValue extends TraceObjectValue {
 			if (resolution == ConflictResolution.DENY) {
 				getParent().doCheckConflicts(lifespan, getEntryKey(), getValue());
 			}
+			else if (resolution == ConflictResolution.ADJUST) {
+				lifespan = getParent().doAdjust(lifespan, getEntryKey(), getValue());
+			}
 			new ValueLifespanSetter(lifespan, getValue(), this) {
 				@Override
 				protected Iterable<InternalTraceObjectValue> getIntersecting(Long lower,
 						Long upper) {
 					Collection<InternalTraceObjectValue> col = Collections.unmodifiableCollection(
-						getParent().doGetValues(lower, upper, getEntryKey()));
+						getParent().doGetValues(Lifespan.span(lower, upper), getEntryKey(), true));
 					return IterableUtils.filteredIterable(col, v -> v != keep);
 				}
 
@@ -151,7 +156,8 @@ interface InternalTraceObjectValue extends TraceObjectValue {
 			}.set(lifespan, getValue());
 			if (isObject()) {
 				DBTraceObject child = getChild();
-				child.emitEvents(new TraceChangeRecord<>(TraceObjectChangeType.LIFE_CHANGED, null, child));
+				child.emitEvents(
+					new TraceChangeRecord<>(TraceObjectChangeType.LIFE_CHANGED, null, child));
 			}
 		}
 	}

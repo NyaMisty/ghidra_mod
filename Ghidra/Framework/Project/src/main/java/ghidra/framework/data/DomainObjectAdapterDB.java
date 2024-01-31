@@ -428,6 +428,16 @@ public abstract class DomainObjectAdapterDB extends DomainObjectAdapter
 	}
 
 	@Override
+	public List<String> getAllUndoNames() {
+		return transactionMgr.getAllUndoNames();
+	}
+
+	@Override
+	public List<String> getAllRedoNames() {
+		return transactionMgr.getAllRedoNames();
+	}
+
+	@Override
 	public TransactionInfo getCurrentTransactionInfo() {
 		return transactionMgr.getCurrentTransactionInfo();
 	}
@@ -467,8 +477,8 @@ public abstract class DomainObjectAdapterDB extends DomainObjectAdapter
 	 */
 	protected boolean propertyChanged(String propertyName, Object oldValue, Object newValue) {
 		setChanged(true);
-		fireEvent(
-			new DomainObjectChangeRecord(DomainObject.DO_PROPERTY_CHANGED, propertyName, newValue));
+		fireEvent(new DomainObjectChangeRecord(DomainObjectEvent.PROPERTY_CHANGED, propertyName,
+			newValue));
 		return true;
 	}
 
@@ -524,7 +534,7 @@ public abstract class DomainObjectAdapterDB extends DomainObjectAdapter
 		}
 
 		if (wasSaved) {
-			fireEvent(new DomainObjectChangeRecord(DomainObject.DO_OBJECT_SAVED));
+			fireEvent(new DomainObjectChangeRecord(DomainObjectEvent.SAVED));
 
 			DomainFile df = getDomainFile();
 			if (df instanceof GhidraFile) {

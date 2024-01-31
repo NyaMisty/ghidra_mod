@@ -39,7 +39,6 @@ import docking.widgets.label.GLabel;
 import docking.widgets.table.*;
 import generic.theme.GIcon;
 import generic.theme.GThemeDefaults.Colors;
-import generic.theme.GThemeDefaults.Colors.*;
 import generic.util.WindowUtilities;
 import ghidra.app.services.DataTypeManagerService;
 import ghidra.app.util.ToolTipUtils;
@@ -47,6 +46,7 @@ import ghidra.app.util.cparser.C.CParserUtils;
 import ghidra.app.util.viewer.field.ListingColors.FunctionColors;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.data.DataType;
+import ghidra.program.model.data.VoidDataType;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.VariableStorage;
 import ghidra.program.model.symbol.ExternalLocation;
@@ -212,7 +212,7 @@ public class FunctionEditorDialog extends DialogComponentProvider implements Mod
 		thunkedText.setEditable(false);
 		DockingUtils.setTransparent(thunkedText);
 		CompoundBorder border =
-			BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(Java.BORDER),
+			BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(Colors.BORDER),
 				BorderFactory.createEmptyBorder(0, 5, 0, 5));
 		thunkedText.setBorder(border);
 		thunkedText.setForeground(FunctionColors.THUNK);
@@ -227,9 +227,6 @@ public class FunctionEditorDialog extends DialogComponentProvider implements Mod
 		scroll = new JScrollPane(verticalScrollPanel);
 		scroll.setBorder(null);
 		scroll.setOpaque(true);
-		scroll.setBackground(Colors.BACKGROUND);
-		scroll.getViewport().setBackground(Palette.NO_COLOR); // transparent
-		scroll.getViewport().setBackground(Colors.BACKGROUND);
 		previewPanel.add(scroll, BorderLayout.CENTER);
 		previewPanel.setBorder(BorderFactory.createLoweredBevelBorder());
 		scroll.getViewport().addMouseListener(new MouseAdapter() {
@@ -651,13 +648,12 @@ public class FunctionEditorDialog extends DialogComponentProvider implements Mod
 			DataType dataType = (DataType) value;
 			Color color = isSelected ? table.getSelectionForeground() : table.getForeground();
 			if (!tableModel.isCellEditable(row, column)) {
-				color =
-					isSelected ? Tables.FG_UNEDITABLE_SELECTED : Tables.FG_UNEDITABLE_UNSELECTED;
+				color = getUneditableForegroundColor(isSelected);
 			}
 			if (dataType != null) {
 				setText(dataType.getName());
 				if (dataType.isNotYetDefined()) {
-					color = isSelected ? Tables.FG_ERROR_SELECTED : Tables.FG_ERROR_UNSELECTED;
+					color = getErrorForegroundColor(isSelected);
 				}
 				String toolTipText = ToolTipUtils.getToolTipText(dataType);
 				String headerText = "<HTML><b>" +
@@ -747,8 +743,15 @@ public class FunctionEditorDialog extends DialogComponentProvider implements Mod
 						setStatusText("Return name may not be modified");
 					}
 					else if ("Storage".equals(getColumnName(column))) {
-						setStatusText(
-							"Enable 'Use Custom Storage' to allow editing of Parameter and Return Storage");
+						boolean blockVoidStorageEdit = (rowData.getIndex() == null) &&
+							VoidDataType.isVoidDataType(rowData.getFormalDataType());
+						if (!blockVoidStorageEdit) {
+							setStatusText(
+								"Enable 'Use Custom Storage' to allow editing of Parameter and Return Storage");
+						}
+						else {
+							setStatusText("Void return storage may not be modified");
+						}
 					}
 				}
 			}
@@ -774,8 +777,7 @@ public class FunctionEditorDialog extends DialogComponentProvider implements Mod
 				boolean isInvalidStorage =
 					!storage.isValid() || rowData.getFormalDataType().getLength() != storage.size();
 				if (isInvalidStorage) {
-					setForeground(
-						isSelected ? Tables.FG_ERROR_SELECTED : Tables.FG_ERROR_UNSELECTED);
+					setForeground(getErrorForegroundColor(isSelected));
 					setToolTipText("Invalid Parameter Storage");
 				}
 				else {
@@ -810,8 +812,7 @@ public class FunctionEditorDialog extends DialogComponentProvider implements Mod
 
 			ParameterTableModel tableModel = (ParameterTableModel) table.getModel();
 			if (!tableModel.isCellEditable(row, column)) {
-				setForeground(
-					isSelected ? Tables.FG_UNEDITABLE_SELECTED : Tables.FG_UNEDITABLE_UNSELECTED);
+				setForeground(getUneditableForegroundColor(isSelected));
 			}
 			else {
 				if (isSelected) {

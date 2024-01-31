@@ -1241,7 +1241,7 @@ public abstract class AbstractDockingTest extends AbstractGuiTest {
 	public static void performAction(DockingActionIf action, boolean waitForCompletion) {
 
 		ActionContext context = runSwing(() -> {
-			ActionContext actionContext = new ActionContext();
+			ActionContext actionContext = new DefaultActionContext();
 			DockingWindowManager activeInstance = DockingWindowManager.getActiveInstance();
 			if (activeInstance == null) {
 				return actionContext;
@@ -1302,7 +1302,7 @@ public abstract class AbstractDockingTest extends AbstractGuiTest {
 			boolean wait) {
 
 		ActionContext context = runSwing(() -> {
-			ActionContext actionContext = new ActionContext();
+			ActionContext actionContext = new DefaultActionContext();
 			if (provider == null) {
 				return actionContext;
 			}
@@ -1742,8 +1742,7 @@ public abstract class AbstractDockingTest extends AbstractGuiTest {
 		Objects.requireNonNull(c);
 		Objects.requireNonNull(consumer);
 
-		if (c instanceof JTextComponent) {
-			JTextComponent tf = (JTextComponent) c;
+		if (c instanceof JTextComponent tf) {
 			forceTextComponentFocus(tf);
 		}
 
@@ -2113,7 +2112,7 @@ public abstract class AbstractDockingTest extends AbstractGuiTest {
 
 			if (waitTime >= DEFAULT_WAIT_TIMEOUT) {
 				createStackTraceForAllThreads(); // this may help debug indecent table models
-				throw new AssertException("Timed out waiting for table model to load");
+				throw new AssertException("Timed out waiting for tree to load");
 			}
 		}
 		waitForSwing();
@@ -2130,7 +2129,7 @@ public abstract class AbstractDockingTest extends AbstractGuiTest {
 	}
 
 	public static boolean isEnabled(DockingActionIf action) {
-		return runSwing(() -> action.isEnabledForContext(new ActionContext()));
+		return runSwing(() -> action.isEnabledForContext(new DefaultActionContext()));
 	}
 
 	public static boolean isEnabled(DockingActionIf action, ActionContextProvider contextProvider) {
@@ -2151,7 +2150,7 @@ public abstract class AbstractDockingTest extends AbstractGuiTest {
 	 * @return the new context
 	 */
 	public ActionContext createContext(Object contextObject) {
-		return new ActionContext().setContextObject(contextObject);
+		return new DefaultActionContext().setContextObject(contextObject);
 	}
 
 	/**
@@ -2161,7 +2160,7 @@ public abstract class AbstractDockingTest extends AbstractGuiTest {
 	 * @return the new context
 	 */
 	public ActionContext createContext(ComponentProvider provider, Object contextObject) {
-		return new ActionContext(provider).setContextObject(contextObject);
+		return new DefaultActionContext(provider).setContextObject(contextObject);
 	}
 
 //==================================================================================================
@@ -2217,7 +2216,9 @@ public abstract class AbstractDockingTest extends AbstractGuiTest {
 	 */
 	public static Image createScreenImage(Component c) throws AWTException {
 
-		yieldToSwing();
+		if (!Swing.isSwingThread()) {
+			yieldToSwing();
+		}
 
 		Rectangle r = c.getBounds();
 		Point p = r.getLocation();
@@ -2234,7 +2235,9 @@ public abstract class AbstractDockingTest extends AbstractGuiTest {
 
 	public static Image createRenderedImage(Component c) {
 
-		yieldToSwing();
+		if (!Swing.isSwingThread()) {
+			yieldToSwing();
+		}
 
 		Image i = runSwing(() -> {
 			try {

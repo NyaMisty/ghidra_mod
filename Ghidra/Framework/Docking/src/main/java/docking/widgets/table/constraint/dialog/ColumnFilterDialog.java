@@ -33,7 +33,7 @@ import docking.widgets.table.GTableFilterPanel;
 import docking.widgets.table.RowObjectFilterModel;
 import docking.widgets.table.columnfilter.*;
 import docking.widgets.table.constrainteditor.ColumnConstraintEditor;
-import generic.theme.GThemeDefaults.Colors.Java;
+import generic.theme.GThemeDefaults.Colors;
 import generic.theme.GThemeDefaults.Colors.Messages;
 import generic.util.WindowUtilities;
 import ghidra.util.HelpLocation;
@@ -100,7 +100,7 @@ public class ColumnFilterDialog<R> extends ReusableDialogComponentProvider
 	public static <R> boolean hasFilterableColumns(JTable table,
 			RowObjectFilterModel<R> model) {
 		return !ColumnFilterDialogModel.getAllColumnFilterData(model, table.getColumnModel())
-				.isEmpty();
+			.isEmpty();
 	}
 
 	private void addClearFilterButton() {
@@ -383,7 +383,7 @@ public class ColumnFilterDialog<R> extends ReusableDialogComponentProvider
 		headerPanel.add(new GLabel("Filter Value", SwingConstants.CENTER));
 
 		headerPanel.setBorder(new CompoundBorder(
-			BorderFactory.createMatteBorder(0, 0, 1, 0, Java.BORDER),
+			BorderFactory.createMatteBorder(0, 0, 1, 0, Colors.BORDER),
 			BorderFactory.createEmptyBorder(4, 0, 4, 0)));
 		return headerPanel;
 	}
@@ -414,7 +414,7 @@ public class ColumnFilterDialog<R> extends ReusableDialogComponentProvider
 		setOkEnabled(isValid);
 		setApplyEnabled(isValid);
 
-		ActionContext context = new ActionContext();
+		ActionContext context = new DefaultActionContext();
 
 		for (DockingActionIf action : getActions()) {
 			action.setEnabled(action.isEnabledForContext(context));

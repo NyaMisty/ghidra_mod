@@ -28,7 +28,7 @@ import ghidra.framework.model.Project;
 import ghidra.framework.options.Options;
 import ghidra.program.model.lang.Endian;
 import ghidra.program.model.listing.Program;
-import ghidra.program.util.ELFExternalSymbolResolver;
+import ghidra.program.util.ExternalSymbolResolver;
 import ghidra.util.Msg;
 import ghidra.util.NumericUtilities;
 import ghidra.util.exception.CancelledException;
@@ -47,7 +47,6 @@ public class ElfLoader extends AbstractLibrarySupportLoader {
 	public final static String ELF_ORIGINAL_IMAGE_BASE_PROPERTY = "ELF Original Image Base";
 	public final static String ELF_PRELINKED_PROPERTY = "ELF Prelinked";
 
-	public final static String ELF_REQUIRED_LIBRARY_PROPERTY_PREFIX = "ELF Required Library ["; // followed by "#]"
 	public final static String ELF_SOURCE_FILE_PROPERTY_PREFIX = "ELF Source File ["; // followed by "#]"
 
 	/**
@@ -94,6 +93,7 @@ public class ElfLoader extends AbstractLibrarySupportLoader {
 				return validationErrorStr;
 			}
 		}
+
 		return super.validateOptions(provider, loadSpec, options, program);
 	}
 
@@ -103,7 +103,7 @@ public class ElfLoader extends AbstractLibrarySupportLoader {
 
 		try {
 			ElfHeader elf = new ElfHeader(provider, null);
-			// TODO: Why do we convey image base to loader ?  This will be managed by each loader !
+
 			List<QueryResult> results =
 				QueryOpinionService.query(getName(), elf.getMachineName(), elf.getFlags());
 			for (QueryResult result : results) {
@@ -158,7 +158,8 @@ public class ElfLoader extends AbstractLibrarySupportLoader {
 			throws CancelledException, IOException {
 		super.postLoadProgramFixups(loadedPrograms, project, options, messageLog, monitor);
 
-		ELFExternalSymbolResolver.fixUnresolvedExternalSymbols(loadedPrograms, messageLog, monitor);
+		ExternalSymbolResolver.fixUnresolvedExternalSymbols(loadedPrograms, true, messageLog,
+			monitor);
 	}
 
 	@Override

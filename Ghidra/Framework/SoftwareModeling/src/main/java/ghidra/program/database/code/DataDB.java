@@ -47,6 +47,7 @@ class DataDB extends CodeUnitDB implements Data {
 	protected DataType baseDataType;
 
 	protected int level = 0;
+
 	protected ProgramDataTypeManager dataMgr;
 
 	private Boolean hasMutabilitySetting;
@@ -128,7 +129,8 @@ class DataDB extends CodeUnitDB implements Data {
 	}
 
 	private void computeLength() {
-		length = dataType.getLength();
+		// NOTE: Data intentionally does not use aligned-length
+		length = dataType.getLength(); 
 
 		// undefined will never change their size
 		if (dataType instanceof Undefined) {

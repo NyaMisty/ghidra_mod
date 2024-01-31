@@ -36,7 +36,6 @@ import ghidra.program.database.code.InstructionDB;
 import ghidra.program.database.data.ProgramDataTypeManager;
 import ghidra.program.database.external.ExternalManagerDB;
 import ghidra.program.database.function.FunctionManagerDB;
-import ghidra.program.database.map.AddressMap;
 import ghidra.program.database.map.AddressMapDB;
 import ghidra.program.database.mem.MemoryMapDB;
 import ghidra.program.database.module.TreeManager;
@@ -52,7 +51,6 @@ import ghidra.program.model.data.CategoryPath;
 import ghidra.program.model.lang.*;
 import ghidra.program.model.listing.*;
 import ghidra.program.model.mem.MemoryBlock;
-import ghidra.program.model.mem.MemoryConflictException;
 import ghidra.program.model.pcode.Varnode;
 import ghidra.program.model.symbol.*;
 import ghidra.program.model.util.AddressSetPropertyMap;
@@ -110,8 +108,12 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 	 *                            property map (StringTranslations).
 	 * 19-Jan-2023 - version 26   Improved relocation data records to incorporate status and 
 	 *                            byte-length when original FileBytes should be used.
+	 * 10-Jul-2023 - version 27   Add support for Instruction length override which utilizes
+	 *                            unused flag bits.
+	 * 19-Oct-2023 - version 28   Revised overlay address space table and eliminated min/max.
+	 *                            Multiple blocks are permitted within a single overlay space.
 	 */
-	static final int DB_VERSION = 26;
+	static final int DB_VERSION = 28;
 
 	/**
 	 * UPGRADE_REQUIRED_BFORE_VERSION should be changed to DB_VERSION anytime the
@@ -210,7 +212,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 	private Address effectiveImageBase = null;
 	private boolean recordChanges;
 
-	private OverlaySpaceAdapterDB overlaySpaceAdapter;
+	private OverlaySpaceDBAdapter overlaySpaceAdapter;
 
 	private Map<String, AddressSetPropertyMapDB> addrSetPropertyMap = new HashMap<>();
 	private Map<String, IntRangeMapDB> intRangePropertyMap = new HashMap<>();
@@ -245,7 +247,8 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 		languageVersion = language.getVersion();
 		languageMinorVersion = language.getMinorVersion();
 
-		addressFactory = new ProgramAddressFactory(language, compilerSpec);
+		addressFactory =
+			new ProgramAddressFactory(language, compilerSpec, s -> getDefinedAddressSet(s));
 
 		recordChanges = false;
 		boolean success = false;
@@ -338,7 +341,8 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 
 			initCompilerSpec();
 
-			addressFactory = new ProgramAddressFactory(language, compilerSpec);
+			addressFactory =
+				new ProgramAddressFactory(language, compilerSpec, s -> getDefinedAddressSet(s));
 
 			VersionException versionExc = createManagers(openMode, monitor);
 			if (dbVersionExc != null) {
@@ -377,6 +381,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 					}
 					languageUpgradeRequired = false;
 				}
+				addressFactory.invalidateOverlayCache();
 				postUpgrade(oldVersion, monitor);
 				changed = true;
 			}
@@ -401,6 +406,14 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 
 		// for tracking during testing
 		ProgramUtilities.addTrackedProgram(this);
+	}
+
+	private AddressSetView getDefinedAddressSet(AddressSpace s) {
+		MemoryMapDB memory = getMemory();
+		if (memory != null) {
+			return memory.intersectRange(s.getMinAddress(), s.getMaxAddress());
+		}
+		return null;
 	}
 
 	/**
@@ -472,6 +485,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 			pl.getString(PREFERRED_ROOT_NAMESPACE_CATEGORY_PROPERTY, null));
 	}
 
+	@Override
 	protected boolean propertyChanged(String propertyName, Object oldValue, Object newValue) {
 		if (propertyName.equals(PREFERRED_ROOT_NAMESPACE_CATEGORY_PROPERTY_PATHNAME)) {
 			String path = (String) newValue;
@@ -739,19 +753,19 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 	}
 
 	@Override
-	public AddressFactory getAddressFactory() {
+	public ProgramAddressFactory getAddressFactory() {
 		return addressFactory;
 	}
 
 	/**
 	 * Returns this programs address map.
-	 * NOTE: This method has been dropped from the Program interface to help
-	 * discourage the use of the program's address map since bad assumptions 
+	 * NOTE: This method should be dropped from the {@link Program} interface to help
+	 * discourage the its use external to this implementation since bad assumptions 
 	 * are frequently made about address keys which may not be ordered or sequential
 	 * across an entire address space.
 	 */
 	@Override
-	public AddressMap getAddressMap() {
+	public AddressMapDB getAddressMap() {
 		return addrMap;
 	}
 
@@ -795,15 +809,15 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 	/**
 	 * notification the a datatype has changed
 	 * @param dataTypeID the id of the datatype that changed.
-	 * @param type the type of the change (moved, renamed, etc.)
+	 * @param eventType the type of the change (moved, renamed, etc.)
 	 * @param isAutoChange true if change was an automatic change in response to 
 	 * another datatype's change (e.g., size, alignment), else false in which case this
 	 * change will be added to program change-set to aid merge conflict detection.
 	 * @param oldValue the old datatype.
 	 * @param newValue the new datatype.
 	 */
-	public void dataTypeChanged(long dataTypeID, int type, boolean isAutoChange, Object oldValue,
-			Object newValue) {
+	public void dataTypeChanged(long dataTypeID, ProgramEvent eventType, boolean isAutoChange,
+			Object oldValue, Object newValue) {
 		// TODO: do not need to record type changes for packed composite change which is in repsonse
 		// to component size or alignment change.
 		if (recordChanges && !isAutoChange) {
@@ -818,100 +832,104 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 		catch (IOException e) {
 			dbError(e);
 		}
-		fireEvent(new ProgramChangeRecord(type, null, null, null, oldValue, newValue));
+		fireEvent(new ProgramChangeRecord(eventType, null, null, null, oldValue, newValue));
 	}
 
 	/**
 	 * Notification that a datatype was added.
 	 * @param dataTypeID the id if the datatype that was added.
-	 * @param type should always be DATATYPE_ADDED
+	 * @param eventType should always be DATATYPE_ADDED
 	 * @param oldValue always null
 	 * @param newValue the datatype added.
 	 */
-	public void dataTypeAdded(long dataTypeID, int type, Object oldValue, Object newValue) {
+	public void dataTypeAdded(long dataTypeID, ProgramEvent eventType, Object oldValue,
+			Object newValue) {
 		if (recordChanges) {
 			((ProgramDBChangeSet) changeSet).dataTypeAdded(dataTypeID);
 		}
 		changed = true;
-		fireEvent(new ProgramChangeRecord(type, null, null, null, oldValue, newValue));
+		fireEvent(new ProgramChangeRecord(eventType, null, null, null, oldValue, newValue));
 	}
 
 	/**
 	 * Notification that a category was changed.
 	 * @param categoryID the id of the datatype that was added.
-	 * @param type the type of changed
+	 * @param eventType the type of change.
 	 * @param oldValue old value depends on the type.
 	 * @param newValue new value depends on the type.
 	 */
-	public void categoryChanged(long categoryID, int type, Object oldValue, Object newValue) {
+	public void categoryChanged(long categoryID, ProgramEvent eventType, Object oldValue,
+			Object newValue) {
 		if (recordChanges) {
 			((ProgramDBChangeSet) changeSet).categoryChanged(categoryID);
 		}
 		changed = true;
-		fireEvent(new ProgramChangeRecord(type, null, null, null, oldValue, newValue));
+		fireEvent(new ProgramChangeRecord(eventType, null, null, null, oldValue, newValue));
 	}
 
 	/**
 	 * Notification that a category was added.
 	 * @param categoryID the id of the datatype that was added.
-	 * @param type the type of changed (should always be CATEGORY_ADDED)
+	 * @param eventType the type of change (should always be CATEGORY_ADDED)
 	 * @param oldValue always null
 	 * @param newValue new value depends on the type.
 	 */
-	public void categoryAdded(long categoryID, int type, Object oldValue, Object newValue) {
+	public void categoryAdded(long categoryID, ProgramEvent eventType, Object oldValue,
+			Object newValue) {
 		if (recordChanges) {
 			((ProgramDBChangeSet) changeSet).categoryAdded(categoryID);
 		}
 		changed = true;
-		fireEvent(new ProgramChangeRecord(type, null, null, null, oldValue, newValue));
+		fireEvent(new ProgramChangeRecord(eventType, null, null, null, oldValue, newValue));
 	}
 
-	public void sourceArchiveAdded(UniversalID sourceArchiveID, int type) {
+	public void sourceArchiveAdded(UniversalID sourceArchiveID, ProgramEvent eventType) {
 		if (recordChanges) {
 			((ProgramDBChangeSet) changeSet).sourceArchiveAdded(sourceArchiveID.getValue());
 		}
 		changed = true;
-		fireEvent(new ProgramChangeRecord(type, null, null, sourceArchiveID, null, null));
+		fireEvent(new ProgramChangeRecord(eventType, null, null, sourceArchiveID, null, null));
 	}
 
-	public void sourceArchiveChanged(UniversalID sourceArchiveID, int type) {
+	public void sourceArchiveChanged(UniversalID sourceArchiveID, ProgramEvent eventType) {
 		if (recordChanges) {
 			((ProgramDBChangeSet) changeSet).sourceArchiveChanged(sourceArchiveID.getValue());
 		}
 		changed = true;
-		fireEvent(new ProgramChangeRecord(type, null, null, sourceArchiveID, null, null));
+		fireEvent(new ProgramChangeRecord(eventType, null, null, sourceArchiveID, null, null));
 	}
 
 	/**
 	 * Notification that a program tree was added.
 	 * @param id the id of the program tree that was added.
-	 * @param type the type of changed
+	 * @param eventType the type of change
 	 * @param oldValue old value is null
 	 * @param newValue new value depends the tree that was added.
 	 */
-	public void programTreeAdded(long id, int type, Object oldValue, Object newValue) {
+	public void programTreeAdded(long id, ProgramEvent eventType, Object oldValue,
+			Object newValue) {
 		if (recordChanges) {
 			((ProgramDBChangeSet) changeSet).programTreeAdded(id);
 		}
 		changed = true;
-		fireEvent(new ProgramChangeRecord(type, null, null, null, oldValue, newValue));
+		fireEvent(new ProgramChangeRecord(eventType, null, null, null, oldValue, newValue));
 	}
 
 	/**
 	 * Notification that a program tree was changed.
 	 * @param id the id of the program tree that was changed.
-	 * @param type the type of change
+	 * @param eventType the {@link EventType} for this event
 	 * @param affectedObj the object that was changed
 	 * @param oldValue old value depends on the type of the change
 	 * @param newValue old value depends on the type of the change
 	 */
-	public void programTreeChanged(long id, int type, Object affectedObj, Object oldValue,
-			Object newValue) {
+	public void programTreeChanged(long id, ProgramEvent eventType, Object affectedObj,
+			Object oldValue, Object newValue) {
 		if (recordChanges) {
 			((ProgramDBChangeSet) changeSet).programTreeChanged(id);
 		}
 		changed = true;
-		fireEvent(new ProgramChangeRecord(type, null, null, affectedObj, oldValue, newValue));
+		fireEvent(new ProgramChangeRecord(eventType, null, null, affectedObj, oldValue, newValue));
 	}
 
 	/**
@@ -919,45 +937,46 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 	 * edit or a delete.
 	 * 
 	 * @param tag the tag that was changed.
-	 * @param type the type of change
+	 * @param eventType the type of change
 	 * @param oldValue old value 
 	 * @param newValue new value
 	 */
-	public void tagChanged(FunctionTag tag, int type, Object oldValue, Object newValue) {
+	public void tagChanged(FunctionTag tag, ProgramEvent eventType, Object oldValue,
+			Object newValue) {
 		if (recordChanges) {
 			long tagID = tag.getId();
 			((ProgramDBChangeSet) changeSet).tagChanged(tagID);
 		}
 		changed = true;
-		fireEvent(new ProgramChangeRecord(type, null, null, tag, oldValue, newValue));
+		fireEvent(new ProgramChangeRecord(eventType, null, null, tag, oldValue, newValue));
 	}
 
 	/**
 	 * Notification that a new {@link FunctionTag} was created.
 	 * 
 	 * @param tag the tag that was created.
-	 * @param type the type of change
+	 * @param eventType the type of change
 	 */
-	public void tagCreated(FunctionTag tag, int type) {
+	public void tagCreated(FunctionTag tag, ProgramEvent eventType) {
 		if (recordChanges) {
 			long tagID = tag.getId();
 			((ProgramDBChangeSet) changeSet).tagCreated(tagID);
 		}
 		changed = true;
-		fireEvent(new ProgramChangeRecord(type, null, null, tag, null, null));
+		fireEvent(new ProgramChangeRecord(eventType, null, null, tag, null, null));
 	}
 
 	/**
 	 * Notification that a symbol was changed.
 	 * @param symbol the symbol that was changed.
-	 * @param type the type of change
+	 * @param eventType the type of change
 	 * @param addr the address of the symbol that changed
 	 * @param affectedObj the object that was changed
 	 * @param oldValue old value depends on the type of the change
 	 * @param newValue old value depends on the type of the change
 	 */
-	public void symbolChanged(Symbol symbol, int type, Address addr, Object affectedObj,
-			Object oldValue, Object newValue) {
+	public void symbolChanged(Symbol symbol, ProgramEvent eventType, Address addr,
+			Object affectedObj, Object oldValue, Object newValue) {
 		if (recordChanges) {
 			// Only add the symbol ID to the change set if it isn't a default symbol.
 			if (!symbol.isDynamic()) {
@@ -970,8 +989,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 					Function function = (Function) parentNamespace;
 					Address entryPoint = function.getEntryPoint();
 					updateChangeSet(entryPoint, entryPoint);
-					fireEvent(new ProgramChangeRecord(DOCR_FUNCTION_CHANGED, entryPoint, entryPoint,
-						function, null, null));
+					fireEvent(new FunctionChangeRecord(function, null));
 				}
 			}
 			if (addr != null) {
@@ -979,18 +997,18 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 			}
 		}
 		changed = true;
-		fireEvent(new ProgramChangeRecord(type, addr, addr, affectedObj, oldValue, newValue));
+		fireEvent(new ProgramChangeRecord(eventType, addr, addr, affectedObj, oldValue, newValue));
 	}
 
 	/**
 	 * Notification that a symbol was added.
 	 * @param symbol the symbol that was added.
-	 * @param type the type of change
+	 * @param eventType the type of change
 	 * @param addr the address of the symbol that added
 	 * @param oldValue old value depends on the type of the change
 	 * @param newValue old value depends on the type of the change
 	 */
-	public void symbolAdded(Symbol symbol, int type, Address addr, Object oldValue,
+	public void symbolAdded(Symbol symbol, ProgramEvent eventType, Address addr, Object oldValue,
 			Object newValue) {
 		if (recordChanges) {
 			if (!symbol.isDynamic()) {
@@ -1003,8 +1021,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 				if (function != null) {
 					Address entryPoint = function.getEntryPoint();
 					updateChangeSet(entryPoint, entryPoint);
-					fireEvent(new ProgramChangeRecord(DOCR_FUNCTION_CHANGED, entryPoint, entryPoint,
-						function, null, null));
+					fireEvent(new FunctionChangeRecord(function, null));
 				}
 			}
 			if (addr != null) {
@@ -1012,7 +1029,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 			}
 		}
 		changed = true;
-		fireEvent(new ProgramChangeRecord(type, addr, addr, null, oldValue, newValue));
+		fireEvent(new ProgramChangeRecord(eventType, addr, addr, null, oldValue, newValue));
 	}
 
 	@Override
@@ -1027,78 +1044,50 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 			}
 		}
 		changed = true;
-		fireEvent(
-			new ProgramChangeRecord(DOCR_REGISTER_VALUES_CHANGED, start, end, null, null, null));
+		fireEvent(new ProgramChangeRecord(ProgramEvent.REGISTER_VALUES_CHANGED, start, end, null,
+			null, null));
 	}
 
 	@Override
-	public void setChanged(int type, Object oldValue, Object newValue) {
-		setChanged(type, (Address) null, (Address) null, oldValue, newValue);
+	public void setChanged(ProgramEvent event, Object oldValue, Object newValue) {
+		setChanged(event, (Address) null, (Address) null, oldValue, newValue);
 	}
 
-	@Override
-	public void setChanged(int type, Address start, Address end, Object oldValue, Object newValue) {
-
-		Address newstart = null;
-		Address newend = null;
-
-		if (start != null) {
-			newstart = start;
-		}
-		if (end != null) {
-			newend = end;
-		}
+	public void setChanged(ProgramChangeRecord changeRecord) {
 		if (recordChanges) {
-			updateChangeSet(newstart, newend);
+			updateChangeSet(changeRecord.getStart(), changeRecord.getEnd());
+		}
+		changed = true;
+		fireEvent(changeRecord);
+	}
+
+	@Override
+	public void setChanged(ProgramEvent event, Address start, Address end, Object oldValue,
+			Object newValue) {
+
+		if (recordChanges) {
+			updateChangeSet(start, end);
 		}
 		changed = true;
 
-		fireEvent(new ProgramChangeRecord(type, newstart, newend, null, oldValue, newValue));
+		fireEvent(new ProgramChangeRecord(event, start, end, null, oldValue, newValue));
 	}
 
 	@Override
-	public void setObjChanged(int type, Object affectedObj, Object oldValue, Object newValue) {
-		changed = true;
-		fireEvent(new ProgramChangeRecord(type, null, null, affectedObj, oldValue, newValue));
-	}
-
-	@Override
-	public void setObjChanged(int type, int subType, Object affectedObj, Object oldValue,
+	public void setObjChanged(ProgramEvent eventType, Object affected, Object oldValue,
 			Object newValue) {
 		changed = true;
-		fireEvent(
-			new ProgramChangeRecord(type, subType, null, null, affectedObj, oldValue, newValue));
+		fireEvent(new ProgramChangeRecord(eventType, null, null, affected, oldValue, newValue));
 	}
 
 	@Override
-	public void setObjChanged(int type, Address addr, Object affectedObj, Object oldValue,
-			Object newValue) {
-		if (recordChanges) {
-			updateChangeSet(addr, addr);
-		}
-		changed = true;
-		fireEvent(new ProgramChangeRecord(type, addr, addr, affectedObj, oldValue, newValue));
-	}
-
-	@Override
-	public void setObjChanged(int type, int subType, Address addr, Object affectedObj,
+	public void setObjChanged(ProgramEvent eventType, Address addr, Object affectedObj,
 			Object oldValue, Object newValue) {
 		if (recordChanges) {
 			updateChangeSet(addr, addr);
 		}
 		changed = true;
-		fireEvent(
-			new ProgramChangeRecord(type, subType, addr, addr, affectedObj, oldValue, newValue));
-	}
-
-	@Override
-	public void setObjChanged(int type, AddressSetView addrSet, Object affectedObj, Object oldValue,
-			Object newValue) {
-		if (recordChanges) {
-			updateChangeSet(addrSet);
-		}
-		changed = true;
-		fireEvent(new ProgramChangeRecord(type, null, null, affectedObj, oldValue, newValue));
+		fireEvent(new ProgramChangeRecord(eventType, addr, addr, affectedObj, oldValue, newValue));
 	}
 
 	private void updateChangeSet(Address start, Address end) {
@@ -1111,12 +1100,6 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 		}
 	}
 
-	private void updateChangeSet(AddressSetView addrSet) {
-		if (addrSet != null) {
-			((ProgramDBChangeSet) changeSet).add(addrSet);
-		}
-	}
-
 	@Override
 	public void setPropertyChanged(String propertyName, Address codeUnitAddr, Object oldValue,
 			Object newValue) {
@@ -1124,7 +1107,8 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 			updateChangeSet(codeUnitAddr, null);
 		}
 		changed = true;
-		fireEvent(new CodeUnitPropertyChangeRecord(propertyName, codeUnitAddr, oldValue, newValue));
+		fireEvent(new CodeUnitPropertyChangeRecord(ProgramEvent.CODE_UNIT_PROPERTY_CHANGED,
+			propertyName, codeUnitAddr, oldValue, newValue));
 	}
 
 	@Override
@@ -1133,7 +1117,8 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 			updateChangeSet(start, end);
 		}
 		changed = true;
-		fireEvent(new CodeUnitPropertyChangeRecord(propertyName, start, end));
+		fireEvent(new CodeUnitPropertyChangeRecord(ProgramEvent.CODE_UNIT_PROPERTY_RANGE_REMOVED,
+			propertyName, start, end));
 	}
 
 	void userDataChanged(String propertyName, Address codeUnitAddr, Object oldValue,
@@ -1181,33 +1166,29 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 		}
 	}
 
-	/**
-	 * Create a new OverlayAddressSpace based upon the given overlay blockName and base AddressSpace
-	 * @param blockName the name of the overlay memory block which corresponds to the new overlay address
-	 * space to be created.  This name may be modified to produce a valid overlay space name and avoid 
-	 * duplication.
-	 * @param originalSpace the base AddressSpace to overlay	
-	 * @param minOffset the min offset of the space
-	 * @param maxOffset the max offset of the space
-	 * @return the new space
-	 * @throws LockException if the program is shared and not checked out exclusively.
-	 * @throws MemoryConflictException if image base override is active
-	 */
-	public AddressSpace addOverlaySpace(String blockName, AddressSpace originalSpace,
-			long minOffset, long maxOffset) throws LockException, MemoryConflictException {
+	@Override
+	public ProgramOverlayAddressSpace createOverlaySpace(String overlaySpaceName,
+			AddressSpace baseSpace) throws IllegalStateException, DuplicateNameException,
+			InvalidNameException, LockException {
 
 		checkExclusiveAccess();
-		if (imageBaseOverride) {
-			throw new MemoryConflictException(
-				"Overlay spaces may not be created while an image-base override is active");
+
+		if (!addressFactory.isValidOverlayBaseSpace(baseSpace)) {
+			throw new IllegalArgumentException(
+				"Invalid address space for overlay: " + baseSpace.getName());
 		}
 
-		OverlayAddressSpace ovSpace = null;
+		ProgramOverlayAddressSpace ovSpace = null;
 		lock.acquire();
 		try {
-			ovSpace = addressFactory.addOverlayAddressSpace(blockName, false, originalSpace,
-				minOffset, maxOffset);
-			overlaySpaceAdapter.addOverlaySpace(ovSpace);
+			if (imageBaseOverride) {
+				throw new IllegalStateException(
+					"Overlay spaces may not be created while an image-base override is active");
+			}
+			ovSpace =
+				overlaySpaceAdapter.createOverlaySpace(addressFactory, overlaySpaceName, baseSpace);
+
+			setChanged(ProgramEvent.OVERLAY_SPACE_ADDED, overlaySpaceName, null);
 		}
 		catch (IOException e) {
 			dbError(e);
@@ -1218,35 +1199,61 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 		return ovSpace;
 	}
 
-	public void renameOverlaySpace(String oldOverlaySpaceName, String newName)
-			throws LockException {
-		checkExclusiveAccess();
-		String revisedName = addressFactory.renameOverlaySpace(oldOverlaySpaceName, newName);
-		if (!revisedName.equals(oldOverlaySpaceName)) {
-			try {
-				overlaySpaceAdapter.renameOverlaySpace(oldOverlaySpaceName, revisedName);
-				addrMap.renameOverlaySpace(oldOverlaySpaceName, revisedName);
-			}
-			catch (IOException e) {
-				dbError(e);
-			}
-		}
-	}
+	@Override
+	public void renameOverlaySpace(String overlaySpaceName, String newName)
+			throws NotFoundException, InvalidNameException, DuplicateNameException, LockException {
 
-	public boolean removeOverlaySpace(AddressSpace overlaySpace) throws LockException {
 		lock.acquire();
 		try {
 			checkExclusiveAccess();
-			MemoryBlock[] blocks = memoryManager.getBlocks();
-			for (MemoryBlock block : blocks) {
-				if (block.getStart().getAddressSpace().equals(overlaySpace)) {
-					return false;
-				}
+
+			AddressSpace space = addressFactory.getAddressSpace(overlaySpaceName);
+			if (space == null || !(space instanceof ProgramOverlayAddressSpace os)) {
+				throw new NotFoundException("Overlay " + overlaySpaceName + " not found");
 			}
-			addressFactory.removeOverlaySpace(overlaySpace.getName());
-			overlaySpaceAdapter.removeOverlaySpace(overlaySpace.getName());
-			addrMap.deleteOverlaySpace(overlaySpace.getName());
+
+			addressFactory.checkValidOverlaySpaceName(newName);
+
+			if (overlaySpaceAdapter.renameOverlaySpace(overlaySpaceName, newName)) {
+				os.setName(newName);
+				addressFactory.overlaySpaceRenamed(overlaySpaceName, newName, true);
+				addrMap.renameOverlaySpace(overlaySpaceName, newName);
+				clearCache(true);
+				setChanged(ProgramEvent.OVERLAY_SPACE_RENAMED, overlaySpaceName, newName);
+				fireEvent(new DomainObjectChangeRecord(DomainObjectEvent.RESTORED));
+			}
+		}
+		catch (IOException e) {
+			dbError(e);
+		}
+		finally {
+			lock.release();
+		}
+	}
+
+	@Override
+	public boolean removeOverlaySpace(String overlaySpaceName)
+			throws LockException, NotFoundException {
+
+		lock.acquire();
+		try {
+			checkExclusiveAccess();
+
+			AddressSpace space = addressFactory.getAddressSpace(overlaySpaceName);
+			if (space == null || !(space instanceof ProgramOverlayAddressSpace os)) {
+				throw new NotFoundException("Overlay " + overlaySpaceName + " not found");
+			}
+
+			if (!os.getOverlayAddressSet().isEmpty()) {
+				return false; // memory blocks are still defined
+			}
+
+			addressFactory.removeOverlaySpace(overlaySpaceName);
+			overlaySpaceAdapter.removeOverlaySpace(overlaySpaceName);
+			addrMap.deleteOverlaySpace(overlaySpaceName);
 			clearCache(true);
+			setChanged(ProgramEvent.OVERLAY_SPACE_REMOVED, overlaySpaceName, null);
+			fireEvent(new DomainObjectChangeRecord(DomainObjectEvent.RESTORED));
 			return true;
 		}
 		catch (IOException e) {
@@ -1331,7 +1338,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 					dataMap.put(IMAGE_OFFSET, Long.toHexString(base.getOffset()));
 					imageBaseOverride = false;
 
-					setChanged(ChangeManager.DOCR_IMAGE_BASE_CHANGED, oldBase, base);
+					setChanged(ProgramEvent.IMAGE_BASE_CHANGED, oldBase, base);
 					invalidate();
 					((SymbolManager) managers[SYMBOL_MGR]).imageBaseChanged(oldBase, base);
 					changed = true;
@@ -1573,7 +1580,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 			int cnt = 0;
 			for (Symbol functionSymbol : symbolTable.getSymbols(memoryManager, SymbolType.FUNCTION,
 				true)) {
-				monitor.checkCanceled();
+				monitor.checkCancelled();
 				ProgramUtilities.convertFunctionWrappedExternalPointer(functionSymbol);
 				monitor.setProgress(++cnt);
 			}
@@ -1587,9 +1594,27 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 			throws CancelledException, IOException {
 
 		VersionException versionExc = null;
-		overlaySpaceAdapter = new OverlaySpaceAdapterDB(dbh);
+		try {
+			overlaySpaceAdapter =
+				OverlaySpaceDBAdapter.getOverlaySpaceAdapter(dbh, openMode, monitor);
+		}
+		catch (VersionException e) {
+			versionExc = e.combine(versionExc);
+			try {
+				overlaySpaceAdapter =
+					OverlaySpaceDBAdapter.getOverlaySpaceAdapter(dbh, READ_ONLY, monitor);
+			}
+			catch (VersionException e1) {
+				if (e1.isUpgradable()) {
+					throw new RuntimeException(
+						"OverlaySpaceDBAdapter is supported but failed to open as READ-ONLY!");
+				}
+				// Unable to proceed without overlay space adapter !
+				return versionExc;
+			}
+		}
 		overlaySpaceAdapter.initializeOverlaySpaces(addressFactory);
-		monitor.checkCanceled();
+		monitor.checkCancelled();
 
 		try {
 			checkOldProperties(openMode, monitor);
@@ -1620,7 +1645,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 				return versionExc;
 			}
 		}
-		monitor.checkCanceled();
+		monitor.checkCancelled();
 
 		try {
 			memoryManager =
@@ -1630,7 +1655,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 		catch (VersionException e) {
 			versionExc = e.combine(versionExc);
 		}
-		monitor.checkCanceled();
+		monitor.checkCancelled();
 
 		try {
 			managers[CODE_MGR] = new CodeManager(dbh, addrMap, openMode, lock, monitor);
@@ -1638,7 +1663,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 		catch (VersionException e) {
 			versionExc = e.combine(versionExc);
 		}
-		monitor.checkCanceled();
+		monitor.checkCancelled();
 
 		try {
 			managers[FUNCTION_MGR] = new FunctionManagerDB(dbh, addrMap, openMode, lock, monitor);
@@ -1667,7 +1692,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 				versionExc = e.combine(versionExc);
 			}
 		}
-		monitor.checkCanceled();
+		monitor.checkCancelled();
 
 		try {
 			managers[EXTERNAL_MGR] = new ExternalManagerDB(dbh, addrMap, openMode, lock, monitor);
@@ -1675,15 +1700,15 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 		catch (VersionException e) {
 			versionExc = e.combine(versionExc);
 		}
-		monitor.checkCanceled();
+		monitor.checkCancelled();
 
 		try {
-			managers[SYMBOL_MGR] = new SymbolManager(dbh, addrMap, openMode, lock, monitor);
+			managers[SYMBOL_MGR] = new SymbolManager(dbh, addrMap, openMode, this, lock, monitor);
 		}
 		catch (VersionException e) {
 			versionExc = e.combine(versionExc);
 		}
-		monitor.checkCanceled();
+		monitor.checkCancelled();
 
 		try {
 			managers[NAMESPACE_MGR] =
@@ -1692,7 +1717,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 		catch (VersionException e) {
 			versionExc = e.combine(versionExc);
 		}
-		monitor.checkCanceled();
+		monitor.checkCancelled();
 
 		try {
 			managers[REF_MGR] = new ReferenceDBManager(dbh, addrMap, openMode, lock, monitor);
@@ -1700,7 +1725,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 		catch (VersionException e) {
 			versionExc = e.combine(versionExc);
 		}
-		monitor.checkCanceled();
+		monitor.checkCancelled();
 
 		try {
 			managers[EQUATE_MGR] = new EquateManager(dbh, addrMap, openMode, lock, monitor);
@@ -1708,7 +1733,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 		catch (VersionException e) {
 			versionExc = e.combine(versionExc);
 		}
-		monitor.checkCanceled();
+		monitor.checkCancelled();
 
 		try {
 			managers[DATA_MGR] =
@@ -1717,7 +1742,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 		catch (VersionException e) {
 			versionExc = e.combine(versionExc);
 		}
-		monitor.checkCanceled();
+		monitor.checkCancelled();
 
 		try {
 			managers[PROPERTY_MGR] =
@@ -1726,7 +1751,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 		catch (VersionException e) {
 			versionExc = e.combine(versionExc);
 		}
-		monitor.checkCanceled();
+		monitor.checkCancelled();
 
 		try {
 			managers[BOOKMARK_MGR] = new BookmarkDBManager(dbh, addrMap, openMode, lock, monitor);
@@ -1734,7 +1759,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 		catch (VersionException e) {
 			versionExc = e.combine(versionExc);
 		}
-		monitor.checkCanceled();
+		monitor.checkCancelled();
 
 		try {
 			managers[TREE_MGR] = new TreeManager(dbh, this, addrMap, openMode, lock, monitor);
@@ -1742,7 +1767,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 		catch (VersionException e) {
 			versionExc = e.combine(versionExc);
 		}
-		monitor.checkCanceled();
+		monitor.checkCancelled();
 
 		try {
 			managers[RELOC_MGR] = new RelocationManager(dbh, addrMap, openMode, lock, monitor);
@@ -1750,7 +1775,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 		catch (VersionException e) {
 			versionExc = e.combine(versionExc);
 		}
-		monitor.checkCanceled();
+		monitor.checkCancelled();
 
 		try {
 			managers[CONTEXT_MGR] = new ProgramRegisterContextDB(dbh, this, language, compilerSpec,
@@ -1760,7 +1785,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 			versionExc = e.combine(versionExc);
 		}
 
-		monitor.checkCanceled();
+		monitor.checkCancelled();
 
 		return versionExc;
 	}
@@ -1769,20 +1794,26 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 			throws CancelledException, IOException {
 		globalNamespace = new GlobalNamespace(getMemory());
 		for (int i = 0; i < NUM_MANAGERS; i++) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			managers[i].setProgram(this);
 		}
 		listing.setProgram(this);
 
-		monitor.checkCanceled();
+		if (openMode == DBConstants.CREATE) {
+			getDataTypeManager().saveDataOrganization();
+		}
 
-		// Upgrade Function Manager 
-		if (openMode == UPGRADE && oldFunctionMgr != null) {
-			oldFunctionMgr.upgrade(this, monitor);
+		monitor.checkCancelled();
+
+		if (openMode == UPGRADE) {
+			if (oldFunctionMgr != null) {
+				// Upgrade Function Manager 
+				oldFunctionMgr.upgrade(this, monitor);
+			}
 		}
 
 		for (int i = 0; i < NUM_MANAGERS; i++) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			managers[i].programReady(openMode, getStoredVersion(), monitor);
 		}
 
@@ -1814,7 +1845,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 	@Override
 	public void invalidate() {
 		clearCache(false);
-		fireEvent(new DomainObjectChangeRecord(DomainObject.DO_OBJECT_RESTORED));
+		fireEvent(new DomainObjectChangeRecord(DomainObjectEvent.RESTORED));
 	}
 
 	@Override
@@ -1888,14 +1919,14 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 			clearCache(false);
 			Iterator<String> iter = addrSetPropertyMap.keySet().iterator();
 			while (iter.hasNext()) {
-				monitor.checkCanceled();
+				monitor.checkCancelled();
 				AddressSetPropertyMapDB pm = addrSetPropertyMap.get(iter.next());
 				pm.remove(startAddr, endAddr);
 			}
 
 			iter = intRangePropertyMap.keySet().iterator();
 			while (iter.hasNext()) {
-				monitor.checkCanceled();
+				monitor.checkCancelled();
 				IntRangeMap map = intRangePropertyMap.get(iter.next());
 				map.clearValue(startAddr, endAddr);
 			}
@@ -2021,7 +2052,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 					Msg.info(this,
 						"Updating language version for Program " + getName() + ": " +
 							language.getLanguageDescription() + " (Version " +
-							language.getVersion() + "." + language.getMinorVersion());
+							language.getVersion() + "." + language.getMinorVersion() + ")");
 				}
 
 				if (newCompilerSpecID != null) {
@@ -2039,7 +2070,8 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 				languageMinorVersion = language.getMinorVersion();
 
 				if (translator != null) {
-					addressFactory = new ProgramAddressFactory(language, compilerSpec);
+					addressFactory = new ProgramAddressFactory(language, compilerSpec,
+						s -> getDefinedAddressSet(s));
 
 					addrMap.setLanguage(language, addressFactory, translator);
 					overlaySpaceAdapter.setLanguage(language, addressFactory, translator);
@@ -2069,6 +2101,9 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 					contextMgr.initializeDefaultValues(language, compilerSpec);
 				}
 
+				// Update datatype manager data organization
+				getDataTypeManager().languageChanged(monitor);
+
 				// Force function manager to reconcile calling conventions
 				managers[FUNCTION_MGR].setProgram(this);
 				managers[FUNCTION_MGR].programReady(UPDATE, getStoredVersion(), monitor);
@@ -2093,7 +2128,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 			finally {
 				setEventsEnabled(true);
 			}
-			fireEvent(new DomainObjectChangeRecord(ChangeManager.DOCR_LANGUAGE_CHANGED));
+			fireEvent(new DomainObjectChangeRecord(ProgramEvent.LANGUAGE_CHANGED));
 		}
 		finally {
 			lock.release();
@@ -2154,7 +2189,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 		InstructionIterator instructions =
 			codeManager.getInstructions(memoryManager.getLoadedAndInitializedAddressSet(), true);
 		while (instructions.hasNext()) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			if (++cnt % 100 == 0) {
 				monitor.setProgress(cnt);
 			}
@@ -2214,7 +2249,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 			AddressSetPropertyMapDB map =
 				AddressSetPropertyMapDB.createPropertyMap(this, mapName, this, addrMap, lock);
 			addrSetPropertyMap.put(mapName, map);
-			setChanged(DOCR_ADDRESS_SET_PROPERTY_MAP_ADDED, null, mapName);
+			setChanged(ProgramEvent.ADDRESS_PROPERTY_MAP_ADDED, null, mapName);
 			return map;
 		}
 		finally {
@@ -2252,7 +2287,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 			}
 			if (pm != null) {
 				pm.delete();
-				setChanged(DOCR_ADDRESS_SET_PROPERTY_MAP_REMOVED, null, mapName);
+				setChanged(ProgramEvent.ADDRESS_PROPERTY_MAP_REMOVED, null, mapName);
 			}
 		}
 		finally {
@@ -2266,7 +2301,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 		try {
 			IntRangeMapDB map = IntRangeMapDB.createPropertyMap(this, mapName, this, addrMap, lock);
 			intRangePropertyMap.put(mapName, map);
-			setChanged(DOCR_INT_ADDRESS_SET_PROPERTY_MAP_ADDED, null, mapName);
+			setChanged(ProgramEvent.INT_PROPERTY_MAP_ADDED, null, mapName);
 			return map;
 		}
 		finally {
@@ -2305,7 +2340,7 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 
 			if (rangeMap != null) {
 				rangeMap.delete();
-				setChanged(DOCR_INT_ADDRESS_SET_PROPERTY_MAP_REMOVED, null, mapName);
+				setChanged(ProgramEvent.INT_PROPERTY_MAP_REMOVED, null, mapName);
 			}
 		}
 		finally {
@@ -2443,6 +2478,8 @@ public class ProgramDB extends DomainObjectAdapterDB implements Program, ChangeM
 		lock.acquire();
 		try {
 			((ProgramCompilerSpec) compilerSpec).installExtensions();
+			getFunctionManager().invalidateCache(true);
+			getDataTypeManager().invalidateCache();
 		}
 		finally {
 			lock.release();

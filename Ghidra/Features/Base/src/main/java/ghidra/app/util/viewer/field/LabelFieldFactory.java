@@ -83,7 +83,7 @@ public class LabelFieldFactory extends FieldFactory {
 	 * @param displayOptions the Options for display properties.
 	 * @param fieldOptions the Options for field specific properties.
 	 */
-	private LabelFieldFactory(FieldFormatModel model, HighlightProvider hlProvider,
+	private LabelFieldFactory(FieldFormatModel model, ListingHighlightProvider hlProvider,
 			ToolOptions displayOptions, ToolOptions fieldOptions) {
 		super(FIELD_NAME, model, hlProvider, displayOptions, fieldOptions);
 
@@ -230,7 +230,7 @@ public class LabelFieldFactory extends FieldFactory {
 		String offcutSymbolText = null;
 		if (!offcutSymbol.isDynamic()) {
 			// the formatter doesn't change dynamic labels
-			offcutSymbolText = codeUnitFormat.getOffcutLabelString(offcutAddress, cu);
+			offcutSymbolText = codeUnitFormat.getOffcutLabelString(offcutAddress, cu, null);
 		}
 		else {
 			offcutSymbolText = offcutSymbol.getName();
@@ -449,7 +449,7 @@ public class LabelFieldFactory extends FieldFactory {
 	}
 
 	@Override
-	public FieldFactory newInstance(FieldFormatModel formatModel, HighlightProvider provider,
+	public FieldFactory newInstance(FieldFormatModel formatModel, ListingHighlightProvider provider,
 			ToolOptions pDisplayOptions, ToolOptions fieldOptions) {
 		return new LabelFieldFactory(formatModel, provider, pDisplayOptions, fieldOptions);
 	}

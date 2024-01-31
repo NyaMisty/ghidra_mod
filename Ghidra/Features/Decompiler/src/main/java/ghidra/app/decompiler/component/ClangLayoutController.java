@@ -52,7 +52,7 @@ public class ClangLayoutController implements LayoutModel, LayoutModelListener {
 	private ClangTokenGroup docroot; // Root of displayed document
 	private Field[] fieldList; // Array of fields comprising layout
 	private FontMetrics metrics;
-	private HighlightFactory hlFactory;
+	private FieldHighlightFactory hlFactory;
 	private ArrayList<LayoutModelListener> listeners;
 	private Color[] syntaxColor; // Foreground colors.
 	private BigInteger numIndexes = BigInteger.ZERO;
@@ -61,7 +61,7 @@ public class ClangLayoutController implements LayoutModel, LayoutModelListener {
 	private boolean showLineNumbers = true;
 
 	public ClangLayoutController(DecompileOptions opt, DecompilerPanel decompilerPanel,
-			FontMetrics met, HighlightFactory hlFactory) {
+			FontMetrics met, FieldHighlightFactory hlFactory) {
 		options = opt;
 		this.decompilerPanel = decompilerPanel;
 		syntaxColor = new Color[ClangToken.MAX_COLOR];
@@ -231,7 +231,7 @@ public class ClangLayoutController implements LayoutModel, LayoutModelListener {
 
 		// Assume docroot has been built.
 
-		PrettyPrinter printer = new PrettyPrinter(function, docroot);
+		PrettyPrinter printer = new PrettyPrinter(function, docroot, null);
 		lines = printer.getLines();
 
 		int lineCount = lines.size();

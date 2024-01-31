@@ -548,7 +548,7 @@ public class ProgramDiff {
 			// Create a do nothing task monitor that we can pass along.
 			monitor = TaskMonitor.DUMMY;
 		}
-		monitor.checkCanceled();
+		monitor.checkCancelled();
 
 		ProgramDiff subDiff;
 		try {
@@ -644,8 +644,7 @@ public class ProgramDiff {
 				monitorMsg = "Checking Repeatable Comment Differences";
 				monitor.setMessage(monitorMsg);
 				as = getCommentDiffs(CodeUnit.REPEATABLE_COMMENT, addrs,
-					new CommentTypeComparator(CodeUnit.REPEATABLE_COMMENT),
-					monitor);
+					new CommentTypeComparator(CodeUnit.REPEATABLE_COMMENT), monitor);
 				break;
 			case ProgramDiffFilter.PRE_COMMENT_DIFFS:
 				monitorMsg = "Checking Pre-Comment Differences";
@@ -928,8 +927,7 @@ public class ProgramDiff {
 				monitorMsg = "Checking Repeatable Comment Differences";
 				monitor.setMessage(monitorMsg);
 				as = getCommentDiffs(CodeUnit.REPEATABLE_COMMENT, checkAddressSet,
-					new CommentTypeComparator(CodeUnit.REPEATABLE_COMMENT),
-					monitor);
+					new CommentTypeComparator(CodeUnit.REPEATABLE_COMMENT), monitor);
 				break;
 			case ProgramDiffFilter.PRE_COMMENT_DIFFS:
 				monitorMsg = "Checking Pre-Comment Differences";
@@ -1192,7 +1190,7 @@ public class ProgramDiff {
 		ProgramContext pc2 = program2.getProgramContext();
 
 		for (String element : pc1.getRegisterNames()) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			Register rb1 = pc1.getRegister(element);
 			Register rb2 = pc2.getRegister(element);
 			if (rb1.isProcessorContext() || rb2.isProcessorContext()) {
@@ -1230,7 +1228,7 @@ public class ProgramDiff {
 			throws CancelledException {
 		AddressRangeIterator iter = addressSet.getAddressRanges();
 		while (iter.hasNext()) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			AddressRange range = iter.next();
 			Address min = range.getMinAddress();
 			Address max = range.getMaxAddress();
@@ -1247,7 +1245,7 @@ public class ProgramDiff {
 				new CombinedAddressRangeIterator(it1, convertedIt2);
 
 			while (p1CombinedIterator.hasNext()) {
-				monitor.checkCanceled();
+				monitor.checkCancelled();
 				AddressRange addrRange = p1CombinedIterator.next();
 				Address rangeMin1 = addrRange.getMinAddress();
 				Address rangeMin2 =
@@ -1417,17 +1415,16 @@ public class ProgramDiff {
 	 */
 	private AddressSet getLabelDifferences(AddressSetView addressSet, TaskMonitor monitor)
 			throws CancelledException {
-		SymbolIterator iter1;
-		SymbolIterator iter2;
+
 		if (addressSet == null) {
-			iter1 = program1.getSymbolTable().getPrimarySymbolIterator(true);
-			iter2 = program2.getSymbolTable().getPrimarySymbolIterator(true);
+			addressSet = program1.getMemory();
 		}
-		else {
-			iter1 = program1.getSymbolTable().getPrimarySymbolIterator(addressSet, true);
-			AddressSet addressSet2 = DiffUtility.getCompatibleAddressSet(addressSet, program2);
-			iter2 = program2.getSymbolTable().getPrimarySymbolIterator(addressSet2, true);
-		}
+
+		SymbolIterator iter1 = program1.getSymbolTable().getPrimarySymbolIterator(addressSet, true);
+		AddressSetView addressSet2 = DiffUtility.getCompatibleAddressSet(addressSet, program2);
+		SymbolIterator iter2 =
+			program2.getSymbolTable().getPrimarySymbolIterator(addressSet2, true);
+
 		SymbolComparator c = new SymbolComparator();
 		return c.getObjectDiffs(iter1, iter2, monitor);
 	}
@@ -1534,17 +1531,15 @@ public class ProgramDiff {
 	 */
 	private AddressSet getFunctionDifferences(AddressSetView addressSet, TaskMonitor monitor)
 			throws CancelledException {
-		FunctionIterator iter1;
-		FunctionIterator iter2;
+
 		if (addressSet == null) {
-			iter1 = program1.getListing().getFunctions(true);
-			iter2 = program2.getListing().getFunctions(true);
+			addressSet = program1.getMemory();
 		}
-		else {
-			iter1 = program1.getListing().getFunctions(addressSet, true);
-			AddressSet addressSet2 = DiffUtility.getCompatibleAddressSet(addressSet, program2);
-			iter2 = program2.getListing().getFunctions(addressSet2, true);
-		}
+
+		FunctionIterator iter1 = program1.getListing().getFunctions(addressSet, true);
+		AddressSetView addressSet2 = DiffUtility.getCompatibleAddressSet(addressSet, program2);
+		FunctionIterator iter2 = program2.getListing().getFunctions(addressSet2, true);
+
 		FunctionComparator c = new FunctionComparator();
 		return c.getObjectDiffs(iter1, iter2, monitor);
 	}
@@ -1588,8 +1583,7 @@ public class ProgramDiff {
 	 * @see ghidra.program.model.listing.CodeUnit
 	 */
 	private AddressSet getCuiDiffs(String cuiType, AddressSetView addressSet,
-			CodeUnitComparator<CodeUnit> c,
-			TaskMonitor monitor) throws CancelledException {
+			CodeUnitComparator<CodeUnit> c, TaskMonitor monitor) throws CancelledException {
 		CodeUnitIterator iter1 = listing1.getCodeUnitIterator(cuiType, addressSet, true);
 		AddressSet addressSet2 = DiffUtility.getCompatibleAddressSet(addressSet, program2);
 		CodeUnitIterator iter2 = listing2.getCodeUnitIterator(cuiType, addressSet2, true);
@@ -1646,7 +1640,7 @@ public class ProgramDiff {
 		AddressSet tmpAddrSet = new AddressSet();
 		AddressRangeIterator iter = initialAddressSet.getAddressRanges();
 		while (iter.hasNext()) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			AddressRange range = iter.next();
 			Address minAddr = range.getMinAddress();
 			Address maxAddr = range.getMaxAddress();
@@ -2682,8 +2676,9 @@ public class ProgramDiff {
 				return false;
 			}
 		}
-		Symbol p1Symbol = p2ToP1Translator.getDestinationProgram().getSymbolTable().getSymbol(
-			p1Ref.getSymbolID());
+		Symbol p1Symbol = p2ToP1Translator.getDestinationProgram()
+				.getSymbolTable()
+				.getSymbol(p1Ref.getSymbolID());
 		Symbol p2Symbol =
 			p2ToP1Translator.getSourceProgram().getSymbolTable().getSymbol(p2Ref.getSymbolID());
 		if (!ProgramDiff.equivalentSymbols(p2ToP1Translator, p1Symbol, p2Symbol)) {
@@ -2871,6 +2866,7 @@ public class ProgramDiff {
 			if (i1 == i2) {
 				return true;
 			}
+			// Checking length and prototype will handle use of length-override
 			if (i1.getLength() != i2.getLength()) {
 				return false;
 			}
@@ -2888,7 +2884,9 @@ public class ProgramDiff {
 			}
 
 			try {
-				if (!Arrays.equals(i1.getBytes(), i2.getBytes())) {
+				byte[] bytes1 = i1.getParsedBytes();
+				byte[] bytes2 = i2.getParsedBytes();
+				if (!Arrays.equals(bytes1, bytes2)) {
 					return false; // bytes differ
 				}
 			}

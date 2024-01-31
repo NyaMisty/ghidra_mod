@@ -28,6 +28,7 @@ import docking.*;
 import docking.action.*;
 import docking.menu.ActionState;
 import docking.menu.MultiStateDockingAction;
+import docking.options.OptionsService;
 import docking.widgets.EventTrigger;
 import docking.widgets.fieldpanel.FieldPanel;
 import docking.widgets.fieldpanel.field.Field;
@@ -41,16 +42,16 @@ import ghidra.GhidraOptions;
 import ghidra.app.nav.Navigatable;
 import ghidra.app.plugin.core.codebrowser.MarkerServiceBackgroundColorModel;
 import ghidra.app.plugin.core.codebrowser.hover.*;
+import ghidra.app.plugin.core.functioncompare.actions.*;
 import ghidra.app.plugin.core.marker.MarkerManager;
 import ghidra.app.services.*;
-import ghidra.app.util.HighlightProvider;
+import ghidra.app.util.ListingHighlightProvider;
 import ghidra.app.util.SymbolPath;
 import ghidra.app.util.viewer.format.*;
 import ghidra.app.util.viewer.util.*;
 import ghidra.framework.options.*;
 import ghidra.framework.plugintool.PluginTool;
 import ghidra.framework.plugintool.ServiceProviderDecorator;
-import ghidra.framework.plugintool.util.OptionsService;
 import ghidra.program.model.address.*;
 import ghidra.program.model.correlate.HashedFunctionAddressCorrelation;
 import ghidra.program.model.listing.*;
@@ -134,7 +135,9 @@ public class ListingCodeComparisonPanel
 	private PreviousDiffAction previousDiffAction;
 	private ListingCodeComparisonOptionsAction optionsAction;
 	private DockingAction[] diffActions;
-	private ApplyFunctionSignatureAction applyFunctionSignatureAction;
+	private FunctionNameApplyAction applyNameAction;
+	private EmptySignatureApplyAction applySignatureEmptyDatatypesAction;
+	private SignatureWithDatatypesApplyAction applySignatureWithDatatypesAction;
 	private JSplitPane splitPane;
 
 	private ListingDiffHighlightProvider leftDiffHighlightProvider;
@@ -268,7 +271,7 @@ public class ListingCodeComparisonPanel
 		for (int i = 0; i < 2; i++) {
 			fieldPanels[i] = listingPanels[i].getFieldPanel();
 			fieldPanels[i].addFocusListener(this);
-			fieldPanels[i].addMouseListener(new DualListingMouseListener(fieldPanels[i], i));
+			fieldPanels[i].addMouseListener(new DualListingMouseListener(i));
 		}
 
 		leftLocationListener = new LeftLocationListener();
@@ -308,17 +311,17 @@ public class ListingCodeComparisonPanel
 	 * @param leftHighlightProvider the highlight provider for the left side's listing.
 	 * @param rightHighlightProvider the highlight provider for the right side's listing.
 	 */
-	public void addHighlightProviders(HighlightProvider leftHighlightProvider,
-			HighlightProvider rightHighlightProvider) {
+	public void addHighlightProviders(ListingHighlightProvider leftHighlightProvider,
+			ListingHighlightProvider rightHighlightProvider) {
 		addLeftHighlightProvider(leftHighlightProvider);
 		addRightHighlightProvider(rightHighlightProvider);
 	}
 
-	private void addLeftHighlightProvider(HighlightProvider leftHighlightProvider) {
+	private void addLeftHighlightProvider(ListingHighlightProvider leftHighlightProvider) {
 		listingPanels[LEFT].getFormatManager().addHighlightProvider(leftHighlightProvider);
 	}
 
-	private void addRightHighlightProvider(HighlightProvider rightHighlightProvider) {
+	private void addRightHighlightProvider(ListingHighlightProvider rightHighlightProvider) {
 		listingPanels[RIGHT].getFormatManager().addHighlightProvider(rightHighlightProvider);
 	}
 
@@ -328,17 +331,17 @@ public class ListingCodeComparisonPanel
 	 * @param leftHighlightProvider the highlight provider for the left side's listing.
 	 * @param rightHighlightProvider the highlight provider for the right side's listing.
 	 */
-	public void removeHighlightProviders(HighlightProvider leftHighlightProvider,
-			HighlightProvider rightHighlightProvider) {
+	public void removeHighlightProviders(ListingHighlightProvider leftHighlightProvider,
+			ListingHighlightProvider rightHighlightProvider) {
 		removeLeftHighlightProvider(leftHighlightProvider);
 		removeRightHighlightProvider(rightHighlightProvider);
 	}
 
-	private void removeLeftHighlightProvider(HighlightProvider leftHighlightProvider) {
+	private void removeLeftHighlightProvider(ListingHighlightProvider leftHighlightProvider) {
 		listingPanels[LEFT].getFormatManager().removeHighlightProvider(leftHighlightProvider);
 	}
 
-	private void removeRightHighlightProvider(HighlightProvider rightHighlightProvider) {
+	private void removeRightHighlightProvider(ListingHighlightProvider rightHighlightProvider) {
 		listingPanels[RIGHT].getFormatManager().removeHighlightProvider(rightHighlightProvider);
 	}
 
@@ -448,7 +451,9 @@ public class ListingCodeComparisonPanel
 		toggleHeaderAction = new ToggleHeaderAction();
 		toggleOrientationAction = new ToggleOrientationAction();
 		toggleHoverAction = new ToggleHoverAction();
-		applyFunctionSignatureAction = new ApplyFunctionSignatureAction(owner);
+		applyNameAction = new FunctionNameApplyAction(owner);
+		applySignatureEmptyDatatypesAction = new EmptySignatureApplyAction(owner);
+		applySignatureWithDatatypesAction = new SignatureWithDatatypesApplyAction(owner);
 		nextDiffAction = new NextDiffAction();
 		previousDiffAction = new PreviousDiffAction();
 		optionsAction = new ListingCodeComparisonOptionsAction();
@@ -465,7 +470,8 @@ public class ListingCodeComparisonPanel
 	public DockingAction[] getActions() {
 		DockingAction[] codeCompActions = super.getActions();
 		DockingAction[] otherActions = new DockingAction[] { toggleHeaderAction,
-			toggleOrientationAction, toggleHoverAction, applyFunctionSignatureAction,
+			toggleOrientationAction, toggleHoverAction, applyNameAction,
+			applySignatureEmptyDatatypesAction, applySignatureWithDatatypesAction,
 			nextPreviousAreaMarkerAction, nextDiffAction, previousDiffAction, optionsAction };
 		int compCount = codeCompActions.length;
 		int otherCount = otherActions.length;
@@ -1540,7 +1546,7 @@ public class ListingCodeComparisonPanel
 			MarginProvider marginProvider = markerManagers[leftOrRight].getMarginProvider();
 			JComponent providerComp = marginProvider.getComponent();
 			DualListingMouseListener providerMouseListener =
-				new DualListingMouseListener(providerComp, leftOrRight);
+				new DualListingMouseListener(leftOrRight);
 			providerComp.addMouseListener(providerMouseListener);
 			listingPanels[leftOrRight].addMarginProvider(marginProvider);
 
@@ -1548,7 +1554,7 @@ public class ListingCodeComparisonPanel
 			OverviewProvider overviewProvider = markerManagers[leftOrRight].getOverviewProvider();
 			JComponent overviewComp = overviewProvider.getComponent();
 			DualListingMouseListener overviewMouseListener =
-				new DualListingMouseListener(overviewComp, leftOrRight);
+				new DualListingMouseListener(leftOrRight);
 			overviewComp.addMouseListener(overviewMouseListener);
 			listingPanels[leftOrRight].addOverviewProvider(overviewProvider);
 		}
@@ -2072,9 +2078,7 @@ public class ListingCodeComparisonPanel
 		ListingCodeComparisonPanel dualListingPanel = this;
 
 		if (event == null) {
-			Navigatable focusedNavigatable = dualListingPanel.getFocusedNavigatable();
-			DualListingActionContext myActionContext =
-				new DualListingActionContext(provider, focusedNavigatable);
+			DualListingActionContext myActionContext = new DualListingActionContext(provider);
 			myActionContext.setContextObject(this);
 			myActionContext.setCodeComparisonPanel(this);
 			return myActionContext;
@@ -2085,23 +2089,21 @@ public class ListingCodeComparisonPanel
 
 		Object leftMarginContext = getContextForMarginPanels(leftPanel, event);
 		if (leftMarginContext != null) {
-			return new ActionContext(provider).setContextObject(leftMarginContext);
+			return new DefaultActionContext(provider).setContextObject(leftMarginContext);
 		}
 		Object rightMarginContext = getContextForMarginPanels(rightPanel, event);
 		if (rightMarginContext != null) {
-			return new ActionContext(provider).setContextObject(rightMarginContext);
+			return new DefaultActionContext(provider).setContextObject(rightMarginContext);
 		}
 
 		Object source = event.getSource();
 		if (source instanceof FieldHeaderComp) {
 			FieldHeaderLocation fieldHeaderLocation =
 				leftPanel.getFieldHeader().getFieldHeaderLocation(event.getPoint());
-			return new ActionContext(provider).setContextObject(fieldHeaderLocation);
+			return new DefaultActionContext(provider).setContextObject(fieldHeaderLocation);
 		}
 
-		Navigatable focusedNavigatable = dualListingPanel.getFocusedNavigatable();
-		DualListingActionContext myActionContext =
-			new DualListingActionContext(provider, focusedNavigatable);
+		DualListingActionContext myActionContext = new DualListingActionContext(provider);
 		myActionContext.setContextObject(this);
 		myActionContext.setCodeComparisonPanel(this);
 		myActionContext.setSourceObject(source);
@@ -2579,11 +2581,6 @@ public class ListingCodeComparisonPanel
 		return data[RIGHT];
 	}
 
-	@Override
-	public Class<? extends CodeComparisonPanel<ListingComparisonFieldPanelCoordinator>> getPanelThisSupersedes() {
-		return null; // Doesn't supersede any other panel.
-	}
-
 	private class DualListingMarkerManager extends MarkerManager {
 
 		private DualListingServiceProvider serviceProvider;
@@ -2653,16 +2650,12 @@ public class ListingCodeComparisonPanel
 
 		private int leftOrRight;
 
-		@SuppressWarnings("unused")
-		private Component leftOrRightComponent;
-
-		DualListingMouseListener(Component leftOrRightComponent, int leftOrRight) {
-			this.leftOrRightComponent = leftOrRightComponent;
+		DualListingMouseListener(int leftOrRight) {
 			this.leftOrRight = leftOrRight;
 		}
 
 		@Override
-		public void mouseClicked(MouseEvent e) {
+		public void mousePressed(MouseEvent e) {
 			setDualPanelFocus(leftOrRight);
 		}
 	}
@@ -2689,13 +2682,15 @@ public class ListingCodeComparisonPanel
 			// Are we on a marker margin of the left listing? Return that margin's context.
 			Object sourceMarginContextObject = getContextObjectForMarginPanels(sourcePanel, event);
 			if (sourceMarginContextObject != null) {
-				return new ActionContext(provider).setContextObject(sourceMarginContextObject);
+				return new DefaultActionContext(provider)
+						.setContextObject(sourceMarginContextObject);
 			}
 			// Are we on a marker margin of the right listing? Return that margin's context.
 			Object destinationMarginContextObject =
 				getContextObjectForMarginPanels(destinationPanel, event);
 			if (destinationMarginContextObject != null) {
-				return new ActionContext(provider).setContextObject(destinationMarginContextObject);
+				return new DefaultActionContext(provider)
+						.setContextObject(destinationMarginContextObject);
 			}
 
 			// If the action is on the Field Header of the left listing panel return an
@@ -2703,7 +2698,7 @@ public class ListingCodeComparisonPanel
 			if (sourceComponent instanceof FieldHeaderComp) {
 				FieldHeaderLocation fieldHeaderLocation =
 					sourcePanel.getFieldHeader().getFieldHeaderLocation(event.getPoint());
-				return new ActionContext(provider).setContextObject(fieldHeaderLocation);
+				return new DefaultActionContext(provider).setContextObject(fieldHeaderLocation);
 			}
 		}
 		return null;

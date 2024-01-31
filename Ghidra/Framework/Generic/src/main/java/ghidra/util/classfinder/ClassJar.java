@@ -61,7 +61,7 @@ class ClassJar extends ClassLocation {
 	}
 
 	@Override
-	void getClasses(Set<Class<?>> set, TaskMonitor monitor) {
+	protected void getClasses(Set<Class<?>> set, TaskMonitor monitor) {
 		checkForDuplicates(set);
 		set.addAll(classes);
 	}
@@ -79,7 +79,7 @@ class ClassJar extends ClassLocation {
 
 			Enumeration<JarEntry> entries = jarFile.entries();
 			while (entries.hasMoreElements()) {
-				monitor.checkCanceled();
+				monitor.checkCancelled();
 				processClassFiles(entries.nextElement());
 			}
 		}

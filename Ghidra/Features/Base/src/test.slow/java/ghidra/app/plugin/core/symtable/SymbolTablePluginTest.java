@@ -237,7 +237,7 @@ public class SymbolTablePluginTest extends AbstractGhidraHeadedIntegrationTest {
 	public void testFilter() throws Exception {
 		openProgram("sample");
 
-		performAction(setFilterAction, new ActionContext(), false);
+		performAction(setFilterAction, new DefaultActionContext(), false);
 		waitForSwing();
 
 		final FilterDialog filterDialog1 = waitForDialogComponent(FilterDialog.class);
@@ -694,7 +694,7 @@ public class SymbolTablePluginTest extends AbstractGhidraHeadedIntegrationTest {
 	public void testDefaultFunctionToNamedFunctionWithFilterOn() throws Exception {
 		openProgram("sample");
 
-		performAction(setFilterAction, new ActionContext(), false);
+		performAction(setFilterAction, new DefaultActionContext(), false);
 		waitForSwing();
 
 		final FilterDialog filterDialog1 = waitForDialogComponent(FilterDialog.class);
@@ -1393,7 +1393,7 @@ public class SymbolTablePluginTest extends AbstractGhidraHeadedIntegrationTest {
 
 		runSwing(() -> checkBox.setSelected(state));
 
-		waitForPostedSwingRunnables();
+		waitForSwing();
 	}
 
 	private void setupSymbolTableFilterToShowParameters() throws Exception {

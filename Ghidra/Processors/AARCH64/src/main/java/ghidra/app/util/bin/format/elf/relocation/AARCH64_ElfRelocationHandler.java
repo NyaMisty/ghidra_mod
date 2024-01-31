@@ -22,8 +22,8 @@ import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.mem.*;
-import ghidra.program.model.reloc.RelocationResult;
 import ghidra.program.model.reloc.Relocation.Status;
+import ghidra.program.model.reloc.RelocationResult;
 import ghidra.util.exception.NotFoundException;
 
 public class AARCH64_ElfRelocationHandler extends ElfRelocationHandler {
@@ -71,6 +71,8 @@ public class AARCH64_ElfRelocationHandler extends ElfRelocationHandler {
 
 		boolean is64bit = true;
 		
+		boolean overflowCheck = true; // *_NC type relocations specify "no overflow check"
+
 		Address symbolAddr = elfRelocationContext.getSymbolAddress(sym);
 		long symbolValue = elfRelocationContext.getSymbolValue(sym);
 		long newValue = 0;
@@ -82,7 +84,7 @@ public class AARCH64_ElfRelocationHandler extends ElfRelocationHandler {
 			case AARCH64_ElfRelocationConstants.R_AARCH64_ABS64: {
 				newValue = (symbolValue + addend);
 				memory.setLong(relocationAddress, newValue);
-				if (addend != 0) {
+				if (symbolIndex != 0 && addend != 0 && !sym.isSection()) {
 					warnExternalOffsetRelocation(program, relocationAddress,
 						symbolAddr, symbolName, addend, elfRelocationContext.getLog());
 					applyComponentOffsetPointer(program, relocationAddress, addend);
@@ -134,6 +136,87 @@ public class AARCH64_ElfRelocationHandler extends ElfRelocationHandler {
 				newValue -= (offset); // PC relative
 				memory.setShort(relocationAddress, (short) (newValue & 0xffff));
 				byteLength = 2;
+				break;
+			}
+
+			// MOV[ZK]:   ((S+A) >>  0) & 0xffff
+			case AARCH64_ElfRelocationConstants.R_AARCH64_MOVW_UABS_G0_NC: {
+				overflowCheck = false;
+				// fall-through
+			}
+			case AARCH64_ElfRelocationConstants.R_AARCH64_MOVW_UABS_G0: {
+				int oldValue = memory.getInt(relocationAddress, isBigEndianInstructions);
+				long imm = (symbolValue + addend) >> 0;
+
+				oldValue &= ~(0xffff << 5);
+				newValue = oldValue | ((imm & 0xffff) << 5);
+
+				memory.setInt(relocationAddress, (int) newValue, isBigEndianInstructions);
+
+				if (overflowCheck && imm > 0xffffL) {
+					// relocation already applied; report overflow condition
+					markAsError(program, relocationAddress, "R_AARCH64_MOVW_UABS_G0", symbolName,
+						"Failed overflow check for R_AARCH64_MOVW_UABS_G0 immediate value",
+						elfRelocationContext.getLog());
+				}
+				break;
+			}
+
+			// MOV[ZK]:   ((S+A) >>  16) & 0xffff
+			case AARCH64_ElfRelocationConstants.R_AARCH64_MOVW_UABS_G1_NC: {
+				overflowCheck = false;
+				// fall-through
+			}
+			case AARCH64_ElfRelocationConstants.R_AARCH64_MOVW_UABS_G1: {
+				int oldValue = memory.getInt(relocationAddress, isBigEndianInstructions);
+				long imm = (symbolValue + addend) >> 16;
+
+				oldValue &= ~(0xffff << 5);
+				newValue = oldValue | ((imm & 0xffff) << 5);
+
+				memory.setInt(relocationAddress, (int) newValue, isBigEndianInstructions);
+
+				if (overflowCheck && imm > 0xffffL) {
+					// relocation already applied; report overflow condition
+					markAsError(program, relocationAddress, "R_AARCH64_MOVW_UABS_G0", symbolName,
+						"Failed overflow check for R_AARCH64_MOVW_UABS_G0 immediate value",
+						elfRelocationContext.getLog());
+				}
+				break;
+			}
+
+			// MOV[ZK]:   ((S+A) >>  32) & 0xffff
+			case AARCH64_ElfRelocationConstants.R_AARCH64_MOVW_UABS_G2_NC: {
+				overflowCheck = false;
+				// fall-through
+			}
+			case AARCH64_ElfRelocationConstants.R_AARCH64_MOVW_UABS_G2: {
+				int oldValue = memory.getInt(relocationAddress, isBigEndianInstructions);
+				long imm = (symbolValue + addend) >> 32;
+
+				oldValue &= ~(0xffff << 5);
+				newValue = oldValue | ((imm & 0xffff) << 5);
+
+				memory.setInt(relocationAddress, (int) newValue, isBigEndianInstructions);
+
+				if (overflowCheck && imm > 0xffffL) {
+					// relocation already applied; report overflow condition
+					markAsError(program, relocationAddress, "R_AARCH64_MOVW_UABS_G0", symbolName,
+						"Failed overflow check for R_AARCH64_MOVW_UABS_G0 immediate value",
+						elfRelocationContext.getLog());
+				}
+				break;
+			}
+
+			// MOV[ZK]:   ((S+A) >>  48) & 0xffff
+			case AARCH64_ElfRelocationConstants.R_AARCH64_MOVW_UABS_G3: {
+				int oldValue = memory.getInt(relocationAddress, isBigEndianInstructions);
+				long imm = (symbolValue + addend) >> 48;
+
+				oldValue &= ~(0xffff << 5);
+				newValue = oldValue | ((imm & 0xffff) << 5);
+
+				memory.setInt(relocationAddress, (int) newValue, isBigEndianInstructions);
 				break;
 			}
 

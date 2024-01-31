@@ -15,16 +15,21 @@
  */
 //DO NOT RUN. THIS IS NOT A SCRIPT! THIS IS A CLASS THAT IS USED BY SCRIPTS. 
 package classrecovery;
-import ghidra.app.decompiler.*;
+import docking.options.OptionsService;
+import ghidra.app.decompiler.DecompInterface;
+import ghidra.app.decompiler.DecompileOptions;
+import ghidra.app.decompiler.DecompileResults;
 import ghidra.framework.options.ToolOptions;
 import ghidra.framework.plugintool.PluginTool;
-import ghidra.framework.plugintool.util.OptionsService;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.ParameterDefinition;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Program;
-import ghidra.program.model.pcode.*;
+import ghidra.program.model.pcode.FunctionPrototype;
+import ghidra.program.model.pcode.HighFunction;
+import ghidra.program.model.pcode.PcodeOp;
+import ghidra.program.model.pcode.Varnode;
 import ghidra.util.exception.CancelledException;
 import ghidra.util.task.TaskMonitor;
 
@@ -54,13 +59,22 @@ public class DecompilerScriptUtils {
 
 		DecompileOptions options;
 		options = new DecompileOptions();
-		OptionsService service = tool.getService(OptionsService.class);
-		if (service != null) {
-			ToolOptions opt = service.getOptions("Decompiler");
-			options.grabFromToolAndProgram(null, opt, program);
-		}
-		decompInterface.setOptions(options);
 
+		if (tool == null) {
+			options.grabFromProgram(program);
+		}
+		else {
+			OptionsService service = tool.getService(OptionsService.class);
+			if (service != null) {
+				ToolOptions opt = service.getOptions("Decompiler");
+				options.grabFromToolAndProgram(null, opt, program);
+			}
+			else {
+				options.grabFromProgram(program);
+			}
+		}
+
+		decompInterface.setOptions(options);
 		decompInterface.toggleCCode(true);
 		decompInterface.toggleSyntaxTree(true);
 		decompInterface.setSimplificationStyle("decompile");
@@ -157,7 +171,7 @@ public class DecompilerScriptUtils {
 		else {
 			int paramCount = parameterDefinitions.length;
 			for (int i = 0; i < parameterDefinitions.length; i++) {
-				monitor.checkCanceled();
+				monitor.checkCancelled();
 				ParameterDefinition param = parameterDefinitions[i];
 
 				if (param.getName().equals("this")) {

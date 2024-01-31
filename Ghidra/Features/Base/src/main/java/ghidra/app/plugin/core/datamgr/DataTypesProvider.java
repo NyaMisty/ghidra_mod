@@ -26,14 +26,12 @@ import javax.swing.event.*;
 import javax.swing.event.HyperlinkEvent.EventType;
 import javax.swing.tree.TreePath;
 
-import docking.ActionContext;
-import docking.DockingWindowManager;
+import docking.*;
 import docking.action.DockingAction;
 import docking.action.ToggleDockingAction;
 import docking.event.mouse.GMouseListenerAdapter;
 import docking.menu.MultiActionDockingAction;
 import docking.widgets.OptionDialog;
-import docking.widgets.PopupWindow;
 import docking.widgets.textpane.GHtmlTextPane;
 import docking.widgets.tree.*;
 import docking.widgets.tree.support.GTreeSelectionEvent.EventOrigin;
@@ -96,7 +94,9 @@ public class DataTypesProvider extends ComponentProviderAdapter {
 	private ToggleDockingAction filterPointersAction;
 	private ToggleDockingAction previewWindowAction;
 	private ToggleDockingAction includeDataMembersInSearchAction;
+	private FilterOnNameOnlyAction filterOnNameOnlyAction;
 	private boolean includeDataMembersInFilter;
+	private boolean filterOnNameOnly;
 
 	public DataTypesProvider(DataTypeManagerPlugin plugin, String providerName) {
 		this(plugin, providerName, false);
@@ -110,10 +110,12 @@ public class DataTypesProvider extends ComponentProviderAdapter {
 		if (isTransient) {
 			setTransient();
 		}
+		else {
+			addToToolbar();
+		}
 
 		setTitle(TITLE);
 		setIcon(new GIcon("icon.plugin.datatypes.provider"));
-		addToToolbar();
 
 		navigationHistory.setAllowDuplicates(true);
 
@@ -180,6 +182,10 @@ public class DataTypesProvider extends ComponentProviderAdapter {
 		addLocalAction(new LockArchiveAction(plugin)); // Archive
 		addLocalAction(new UnlockArchiveAction(plugin)); // Archive
 
+		// Arch group
+		addLocalAction(new SetArchiveArchitectureAction(plugin)); // Archive
+		addLocalAction(new ClearArchiveArchitectureAction(plugin)); // Archive
+
 		// Repository group : version control actions
 		addVersionControlActions(); // Archive
 
@@ -194,6 +200,9 @@ public class DataTypesProvider extends ComponentProviderAdapter {
 		addLocalAction(new FindStructuresBySizeAction(plugin, "4"));
 		includeDataMembersInSearchAction = new IncludeDataTypesInFilterAction(plugin, this, "5");
 		addLocalAction(includeDataMembersInSearchAction);
+
+		filterOnNameOnlyAction = new FilterOnNameOnlyAction(plugin, this, "6");
+		addLocalAction(filterOnNameOnlyAction);
 
 		addLocalAction(new ApplyFunctionDataTypesAction(plugin)); // Tree
 		addLocalAction(new CaptureFunctionDataTypesAction(plugin)); // Tree
@@ -344,7 +353,7 @@ public class DataTypesProvider extends ComponentProviderAdapter {
 			Object source = event.getSource();
 			if (source instanceof JTextField || source instanceof JTextPane) {
 				Component component = (Component) source;
-				return new ActionContext(this, source, component);
+				return new DefaultActionContext(this, source, component);
 			}
 
 			Point point = event.getPoint();
@@ -473,15 +482,10 @@ public class DataTypesProvider extends ComponentProviderAdapter {
 				setDataTypeSelected(dt);
 			}
 			else if (type == EventType.ENTERED) {
-				//
-				// The user hovered over the link--show something useful, like the path
-				//
-				JToolTip toolTip = new JToolTip();
-				CategoryPath path = dt.getCategoryPath();
-				toolTip.setTipText(path.toString());
-				PopupWindow popup = new PopupWindow(toolTip);
-				popup.setCloseWindowDelay(10000);
-				popup.showPopup((MouseEvent) event.getInputEvent());
+				previewPane.setToolTipText(dt.getCategoryPath().toString());
+			}
+			else if (type == EventType.EXITED) {
+				previewPane.setToolTipText(null);
 			}
 
 		});
@@ -821,23 +825,24 @@ public class DataTypesProvider extends ComponentProviderAdapter {
 		return selectedDataTypes;
 	}
 
-	// this is a callback from the action--we need this to prevent callbacks, as the other
-	// version of this method will update the action, which would trigger a callback
+	// this is called from the action
 	public void setIncludeDataTypeMembersInFilterCallback(boolean newValue) {
 		includeDataMembersInFilter = newValue;
-		archiveGTree.setIncludeDataTypeMembersInSearch(includeDataMembersInFilter);
+		archiveGTree.updateDataTransformer(this);
+	}
+
+	// this is called from the action
+	public void setFilterOnNameOnlyCallback(boolean newValue) {
+		filterOnNameOnly = newValue;
+		archiveGTree.updateDataTransformer(this);
 	}
 
 	public void setIncludeDataTypeMembersInFilter(boolean newValue) {
-		includeDataMembersInFilter = newValue;
-		archiveGTree.setIncludeDataTypeMembersInSearch(includeDataMembersInFilter);
+		includeDataMembersInSearchAction.setSelected(newValue);
+	}
 
-		// make sure the action is in sync
-		ToggleDockingAction action = includeDataMembersInSearchAction;
-		boolean selected = action.isSelected();
-		if (selected != includeDataMembersInFilter) {
-			action.setSelected(includeDataMembersInFilter);
-		}
+	public void setFilterOnNameOnly(boolean newValue) {
+		filterOnNameOnlyAction.setSelected(newValue);
 	}
 
 	public void setFilteringArrays(boolean b) {
@@ -848,8 +853,12 @@ public class DataTypesProvider extends ComponentProviderAdapter {
 		archiveGTree.enablePointerFilter(b);
 	}
 
-	boolean includeDataMembersInSearch() {
+	public boolean isIncludeDataMembersInSearch() {
 		return includeDataMembersInFilter;
+	}
+
+	public boolean isFilterOnNameOnly() {
+		return filterOnNameOnly;
 	}
 
 	@Override
@@ -979,4 +988,5 @@ public class DataTypesProvider extends ComponentProviderAdapter {
 		navigationHistory.add(new DataTypeUrl(dt));
 		contextChanged();
 	}
+
 }

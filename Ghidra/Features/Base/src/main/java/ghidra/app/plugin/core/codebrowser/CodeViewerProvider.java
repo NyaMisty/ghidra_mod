@@ -4,9 +4,9 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
+ * 
  *      http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -38,13 +38,14 @@ import docking.widgets.fieldpanel.HoverHandler;
 import docking.widgets.fieldpanel.internal.FieldPanelCoordinator;
 import docking.widgets.fieldpanel.support.*;
 import generic.theme.GIcon;
+import ghidra.app.context.ListingActionContext;
 import ghidra.app.nav.*;
 import ghidra.app.plugin.core.clipboard.CodeBrowserClipboardProvider;
 import ghidra.app.plugin.core.codebrowser.actions.*;
 import ghidra.app.plugin.core.codebrowser.hover.ListingHoverService;
 import ghidra.app.services.*;
 import ghidra.app.util.*;
-import ghidra.app.util.viewer.field.FieldFactory;
+import ghidra.app.util.viewer.field.ListingField;
 import ghidra.app.util.viewer.format.*;
 import ghidra.app.util.viewer.listingpanel.*;
 import ghidra.app.util.viewer.multilisting.MultiListingLayoutModel;
@@ -79,7 +80,7 @@ public class CodeViewerProvider extends NavigatableComponentProviderAdapter
 	private static final String DIVIDER_LOCATION = "DividerLocation";
 
 	private ImageIcon navigatableIcon;
-	private Map<Program, HighlightProvider> programHighlighterMap = new HashMap<>();
+	private Map<Program, ListingHighlightProvider> programHighlighterMap = new HashMap<>();
 	private ProgramHighlighterProvider highlighterAdapter;
 
 	private ListingPanel listingPanel;
@@ -144,7 +145,7 @@ public class CodeViewerProvider extends NavigatableComponentProviderAdapter
 		listingPanel = new ListingPanel(formatMgr);
 		listingPanel.enablePropertyBasedColorModel(true);
 		decorationPanel = new ListingPanelContainer(listingPanel, isConnected);
-		ListingHighlightProvider listingHighlighter =
+		ListingMiddleMouseHighlightProvider listingHighlighter =
 			createListingHighlighter(listingPanel, tool, decorationPanel);
 		highlighterAdapter = new ProgramHighlighterProvider(listingHighlighter);
 		listingPanel.addHighlightProvider(highlighterAdapter);
@@ -177,13 +178,6 @@ public class CodeViewerProvider extends NavigatableComponentProviderAdapter
 	}
 
 	/**
-	 * @return true if this listing is backed by a dynamic data source (e.g., debugger)
-	 */
-	public boolean isDynamicListing() {
-		return false;
-	}
-
-	/**
 	 * TODO: Remove or rename this to something that accommodates redirecting writes, e.g., to a
 	 * debug target process, particularly for assembly, which may involve code unit modification
 	 * after a successful write, reported asynchronously :/ .
@@ -194,10 +188,10 @@ public class CodeViewerProvider extends NavigatableComponentProviderAdapter
 		return false;
 	}
 
-	private ListingHighlightProvider createListingHighlighter(ListingPanel panel,
+	private ListingMiddleMouseHighlightProvider createListingHighlighter(ListingPanel panel,
 			PluginTool pluginTool, Component repaintComponent) {
-		ListingHighlightProvider listingHighlighter =
-			new ListingHighlightProvider(pluginTool, repaintComponent);
+		ListingMiddleMouseHighlightProvider listingHighlighter =
+			new ListingMiddleMouseHighlightProvider(pluginTool, repaintComponent);
 		panel.addButtonPressedListener(listingHighlighter);
 		return listingHighlighter;
 	}
@@ -266,6 +260,10 @@ public class CodeViewerProvider extends NavigatableComponentProviderAdapter
 		return decorationPanel;
 	}
 
+	protected ListingActionContext newListingActionContext() {
+		return new CodeViewerActionContext(this);
+	}
+
 	@Override
 	public ActionContext getActionContext(MouseEvent event) {
 		if (program == null) {
@@ -273,7 +271,7 @@ public class CodeViewerProvider extends NavigatableComponentProviderAdapter
 		}
 
 		if (event == null) {
-			return new CodeViewerActionContext(this);
+			return newListingActionContext();
 		}
 
 		Object source = event.getSource();
@@ -283,7 +281,7 @@ public class CodeViewerProvider extends NavigatableComponentProviderAdapter
 			if (programLocation == null) {
 				return null;
 			}
-			return new CodeViewerActionContext(this);
+			return newListingActionContext();
 		}
 
 		FieldHeader headerPanel = listingPanel.getFieldHeader();
@@ -398,14 +396,14 @@ public class CodeViewerProvider extends NavigatableComponentProviderAdapter
 	}
 
 	@Override
-	public void removeHighlightProvider(HighlightProvider highlightProvider,
+	public void removeHighlightProvider(ListingHighlightProvider highlightProvider,
 			Program highlightProgram) {
 		programHighlighterMap.remove(highlightProgram);
 		updateHighlightProvider();
 	}
 
 	@Override
-	public void setHighlightProvider(HighlightProvider highlightProvider,
+	public void setHighlightProvider(ListingHighlightProvider highlightProvider,
 			Program highlightProgram) {
 		programHighlighterMap.put(highlightProgram, highlightProvider);
 		updateHighlightProvider();
@@ -1095,7 +1093,7 @@ public class CodeViewerProvider extends NavigatableComponentProviderAdapter
 			setHover(isSelected());
 		}
 
-		void setHover(boolean enabled) {
+		private void setHover(boolean enabled) {
 			getToolBarData().setIcon(enabled ? HOVER_ON_ICON : HOVER_OFF_ICON);
 			setHoverEnabled(enabled);
 		}
@@ -1105,23 +1103,23 @@ public class CodeViewerProvider extends NavigatableComponentProviderAdapter
 	 * A class that allows clients to install transient highlighters while keeping the middle-mouse
 	 * highlighting on at the same time.
 	 */
-	private class ProgramHighlighterProvider implements HighlightProvider {
+	private class ProgramHighlighterProvider implements ListingHighlightProvider {
 
-		private final ListingHighlightProvider listingHighlighter;
+		private final ListingMiddleMouseHighlightProvider listingHighlighter;
 
-		ProgramHighlighterProvider(ListingHighlightProvider listingHighlighter) {
+		ProgramHighlighterProvider(ListingMiddleMouseHighlightProvider listingHighlighter) {
 			this.listingHighlighter = listingHighlighter;
 		}
 
 		@Override
-		public Highlight[] getHighlights(String text, Object obj,
-				Class<? extends FieldFactory> fieldFactoryClass, int cursorTextOffset) {
+		public Highlight[] createHighlights(String text, ListingField field, int cursorTextOffset) {
 
 			List<Highlight> list = new ArrayList<>();
-			HighlightProvider currentExternalHighligter = programHighlighterMap.get(program);
+			ListingHighlightProvider currentExternalHighligter =
+				programHighlighterMap.get(program);
 			if (currentExternalHighligter != null) {
-				Highlight[] highlights = currentExternalHighligter.getHighlights(text, obj,
-					fieldFactoryClass, cursorTextOffset);
+				Highlight[] highlights = currentExternalHighligter.createHighlights(text, field,
+					cursorTextOffset);
 				for (Highlight highlight : highlights) {
 					list.add(highlight);
 				}
@@ -1130,7 +1128,7 @@ public class CodeViewerProvider extends NavigatableComponentProviderAdapter
 			// always call the listing highlighter last so the middle-mouse highlight will always
 			// be on top of other highlights
 			Highlight[] highlights =
-				listingHighlighter.getHighlights(text, obj, fieldFactoryClass, cursorTextOffset);
+				listingHighlighter.createHighlights(text, field, cursorTextOffset);
 			for (Highlight highlight : highlights) {
 				list.add(highlight);
 			}

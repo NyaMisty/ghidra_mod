@@ -22,27 +22,21 @@ import docking.Tool;
 import docking.action.DockingActionIf;
 import docking.actions.PopupActionProvider;
 import generic.jar.ResourceFile;
-import ghidra.app.context.ListingActionContext;
 import ghidra.app.plugin.PluginCategoryNames;
 import ghidra.app.plugin.core.debug.DebuggerPluginPackage;
-import ghidra.app.plugin.core.debug.mapping.DebuggerPlatformMapper;
+import ghidra.app.plugin.core.debug.gui.listing.DebuggerListingActionContext;
 import ghidra.app.services.DebuggerPlatformService;
 import ghidra.app.services.DebuggerTraceManagerService;
 import ghidra.framework.plugintool.*;
-import ghidra.framework.plugintool.AutoService.Wiring;
-import ghidra.framework.plugintool.annotation.AutoServiceConsumed;
 import ghidra.framework.plugintool.util.PluginStatus;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.lang.*;
-import ghidra.program.model.listing.Program;
 import ghidra.program.util.DefaultLanguageService;
 import ghidra.program.util.ProgramContextImpl;
 import ghidra.trace.model.Trace;
 import ghidra.trace.model.guest.TraceGuestPlatform;
 import ghidra.trace.model.guest.TracePlatform;
 import ghidra.trace.model.program.TraceProgramView;
-import ghidra.trace.model.target.TraceObject;
-import ghidra.trace.model.thread.TraceThread;
 
 @PluginInfo(
 	shortDescription = "Disassemble trace bytes in the debugger",
@@ -62,22 +56,7 @@ import ghidra.trace.model.thread.TraceThread;
 	})
 public class DebuggerDisassemblerPlugin extends Plugin implements PopupActionProvider {
 
-	protected static class Reqs {
-		final DebuggerPlatformMapper mapper;
-		final TraceThread thread;
-		final TraceObject object;
-		final TraceProgramView view;
-
-		public Reqs(DebuggerPlatformMapper mapper, TraceThread thread, TraceObject object,
-				TraceProgramView view) {
-			this.mapper = mapper;
-			this.thread = thread;
-			this.object = object;
-			this.view = view;
-		}
-	}
-
-	protected static RegisterValue deriveAlternativeDefaultContext(Language language,
+	public static RegisterValue deriveAlternativeDefaultContext(Language language,
 			LanguageID alternative, Address address) {
 		LanguageService langServ = DefaultLanguageService.getLanguageService();
 		Language altLang;
@@ -101,19 +80,11 @@ public class DebuggerDisassemblerPlugin extends Plugin implements PopupActionPro
 		return result;
 	}
 
-	@AutoServiceConsumed
-	DebuggerTraceManagerService traceManager;
-	@AutoServiceConsumed
-	DebuggerPlatformService platformService;
-	@SuppressWarnings("unused")
-	private final Wiring autoServiceWiring;
-
 	CurrentPlatformTraceDisassembleAction actionDisassemble;
 	CurrentPlatformTracePatchInstructionAction actionPatchInstruction;
 
 	public DebuggerDisassemblerPlugin(PluginTool tool) {
 		super(tool);
-		this.autoServiceWiring = AutoService.wireServicesProvidedAndConsumed(this);
 	}
 
 	@Override
@@ -209,23 +180,18 @@ public class DebuggerDisassemblerPlugin extends Plugin implements PopupActionPro
 
 	@Override
 	public List<DockingActionIf> getPopupActions(Tool tool, ActionContext context) {
-		if (!(context instanceof ListingActionContext)) {
-			return null;
-		}
 		/**
 		 * I could use Navigatable.isDynamic, but it seems more appropriate, since the types are in
 		 * scope here, to check for an actual trace.
 		 */
-		ListingActionContext lac = (ListingActionContext) context;
+		if (!(context instanceof DebuggerListingActionContext lac)) {
+			return null;
+		}
 		Address address = lac.getAddress();
 		if (address == null) {
 			return null;
 		}
-		Program program = lac.getProgram();
-		if (!(program instanceof TraceProgramView)) {
-			return null;
-		}
-		TraceProgramView view = (TraceProgramView) program;
+		TraceProgramView view = lac.getProgram();
 		return getActionsFor(new ArrayList<>(), view.getTrace(), view.getSnap(), address);
 	}
 }

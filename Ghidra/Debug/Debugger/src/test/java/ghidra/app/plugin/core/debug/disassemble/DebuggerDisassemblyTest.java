@@ -23,7 +23,6 @@ import java.nio.ByteBuffer;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 
 import org.junit.*;
 
@@ -32,18 +31,17 @@ import docking.action.DockingActionIf;
 import generic.Unique;
 import ghidra.app.context.ListingActionContext;
 import ghidra.app.plugin.core.assembler.AssemblerPluginTestHelper;
-import ghidra.app.plugin.core.debug.gui.AbstractGhidraHeadedDebuggerGUITest;
-import ghidra.app.plugin.core.debug.gui.listing.DebuggerListingPlugin;
-import ghidra.app.plugin.core.debug.gui.listing.DebuggerListingProvider;
+import ghidra.app.plugin.core.debug.gui.AbstractGhidraHeadedDebuggerTest;
+import ghidra.app.plugin.core.debug.gui.listing.*;
 import ghidra.app.plugin.core.debug.service.control.DebuggerControlServicePlugin;
 import ghidra.app.plugin.core.debug.service.platform.DebuggerPlatformServicePlugin;
-import ghidra.app.plugin.core.debug.service.workflow.DebuggerWorkflowServiceProxyPlugin;
-import ghidra.app.plugin.core.debug.workflow.DisassembleAtPcDebuggerBot;
-import ghidra.app.services.*;
+import ghidra.app.services.DebuggerControlService;
+import ghidra.app.services.DebuggerPlatformService;
 import ghidra.dbg.target.TargetEnvironment;
 import ghidra.dbg.target.schema.SchemaContext;
 import ghidra.dbg.target.schema.TargetObjectSchema.SchemaName;
 import ghidra.dbg.target.schema.XmlSchemaContext;
+import ghidra.debug.api.control.ControlMode;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressSet;
 import ghidra.program.model.lang.LanguageID;
@@ -55,13 +53,13 @@ import ghidra.trace.database.listing.DBTraceInstruction;
 import ghidra.trace.database.listing.DBTraceInstructionsMemoryView;
 import ghidra.trace.database.memory.DBTraceMemoryManager;
 import ghidra.trace.database.memory.DBTraceMemorySpace;
-import ghidra.trace.database.program.DBTraceVariableSnapProgramView;
 import ghidra.trace.database.target.DBTraceObject;
 import ghidra.trace.database.target.DBTraceObjectManager;
 import ghidra.trace.model.Lifespan;
 import ghidra.trace.model.guest.TraceGuestPlatform;
 import ghidra.trace.model.memory.TraceMemoryFlag;
 import ghidra.trace.model.memory.TraceObjectMemoryRegion;
+import ghidra.trace.model.program.TraceProgramView;
 import ghidra.trace.model.stack.TraceObjectStackFrame;
 import ghidra.trace.model.target.TraceObject.ConflictResolution;
 import ghidra.trace.model.target.TraceObjectKeyPath;
@@ -69,7 +67,7 @@ import ghidra.trace.model.thread.TraceObjectThread;
 import ghidra.trace.model.thread.TraceThread;
 import ghidra.util.task.TaskMonitor;
 
-public class DebuggerDisassemblyTest extends AbstractGhidraHeadedDebuggerGUITest {
+public class DebuggerDisassemblyTest extends AbstractGhidraHeadedDebuggerTest {
 	protected DebuggerDisassemblerPlugin disassemblerPlugin;
 	protected DebuggerPlatformService platformService;
 	protected DebuggerListingProvider listingProvider;
@@ -77,56 +75,59 @@ public class DebuggerDisassemblyTest extends AbstractGhidraHeadedDebuggerGUITest
 
 	@Before
 	public void setUpDisassemblyTest() throws Exception {
-		ctx = XmlSchemaContext.deserialize("" + //
-			"<context>" + //
-			"    <schema name='Session' elementResync='NEVER' attributeResync='ONCE'>" + //
-			"        <attribute name='Targets' schema='TargetContainer' />" + //
-			"    </schema>" + //
-			"    <schema name='TargetContainer' canonical='yes' elementResync='NEVER' " + //
-			"            attributeResync='ONCE'>" + //
-			"        <element schema='Target' />" + //
-			"    </schema>" + //
-			"    <schema name='Target' elementResync='NEVER' attributeResync='NEVER'>" + //
-			"        <interface name='Process' />" + //
-			"        <interface name='Aggregate' />" + //
-			"        <attribute name='Environment' schema='Environment' />" + //
-			"        <attribute name='Memory' schema='Memory' />" + //
-			"        <attribute name='Threads' schema='ThreadContainer' />" + //
-			"    </schema>" + //
-			"    <schema name='Environment' elementResync='NEVER' " + //
-			"            attributeResync='NEVER'>" + //
-			"        <interface name='Environment' />" + //
-			"    </schema>" + //
-			"    <schema name='Memory' canonical='yes' elementResync='NEVER' " + //
-			"            attributeResync='NEVER'>" + //
-			"        <element schema='MemoryRegion' />" + //
-			"    </schema>" + //
-			"    <schema name='MemoryRegion' elementResync='NEVER' attributeResync='NEVER'>" + //
-			"        <interface name='MemoryRegion' />" + //
-			"    </schema>" + //
-			"    <schema name='ThreadContainer' canonical='yes' elementResync='NEVER' " + //
-			"            attributeResync='NEVER'>" + //
-			"        <element schema='Thread' />" + //
-			"    </schema>" + //
-			"    <schema name='Thread' elementResync='NEVER' attributeResync='NEVER'>" + //
-			"        <interface name='Thread' />" + //
-			"        <interface name='Aggregate' />" + //
-			"        <attribute name='Stack' schema='Stack' />" + //
-			"    </schema>" + //
-			"    <schema name='Stack' canonical='yes' elementResync='NEVER' " + //
-			"            attributeResync='NEVER'>" + //
-			"        <interface name='Stack' />" + //
-			"        <element schema='Frame' />" + //
-			"    </schema>" + //
-			"    <schema name='Frame' elementResync='NEVER' attributeResync='NEVER'>" + //
-			"        <interface name='StackFrame' />" + //
-			"    </schema>" + //
-			"</context>");
+		ctx = XmlSchemaContext.deserialize("""
+				<context>
+				    <schema name='Session' elementResync='NEVER' attributeResync='ONCE'>
+				        <attribute name='Targets' schema='TargetContainer' />
+				    </schema>
+				    <schema name='TargetContainer' canonical='yes' elementResync='NEVER'
+				            attributeResync='ONCE'>
+				        <element schema='Target' />
+				    </schema>
+				    <schema name='Target' elementResync='NEVER' attributeResync='NEVER'>
+				        <interface name='Process' />
+				        <interface name='Aggregate' />
+				        <attribute name='Environment' schema='Environment' />
+				        <attribute name='Memory' schema='Memory' />
+				        <attribute name='Threads' schema='ThreadContainer' />
+				    </schema>
+				    <schema name='Environment' elementResync='NEVER'
+				            attributeResync='NEVER'>"
+				        <interface name='Environment' />
+				    </schema>
+				    <schema name='Memory' canonical='yes' elementResync='NEVER'
+				            attributeResync='NEVER'>
+				        <element schema='MemoryRegion' />"
+				    </schema>
+				    <schema name='MemoryRegion' elementResync='NEVER' attributeResync='NEVER'>
+				        <interface name='MemoryRegion' />
+				    </schema>"
+				    <schema name='ThreadContainer' canonical='yes' elementResync='NEVER'
+				            attributeResync='NEVER'>
+				        <element schema='Thread' />
+				    </schema>
+				    <schema name='Thread' elementResync='NEVER' attributeResync='NEVER'>
+				        <interface name='Thread' />
+				        <interface name='Aggregate' />
+				        <attribute name='Stack' schema='Stack' />
+				    </schema>
+				    <schema name='Stack' canonical='yes' elementResync='NEVER'
+				            attributeResync='NEVER'>
+				        <interface name='Stack' />
+				        <element schema='Frame' />
+				    </schema>
+				    <schema name='Frame' elementResync='NEVER' attributeResync='NEVER'>
+				        <interface name='StackFrame' />
+				    </schema>
+				</context>""");
 
 		addPlugin(tool, DebuggerListingPlugin.class);
 		platformService = addPlugin(tool, DebuggerPlatformServicePlugin.class);
 		disassemblerPlugin = addPlugin(tool, DebuggerDisassemblerPlugin.class);
 		listingProvider = waitForComponentProvider(DebuggerListingProvider.class);
+
+		// TODO: Maybe this shouldn't be the default for these tests?
+		listingProvider.setAutoDisassemble(false);
 	}
 
 	protected void assertX86Nop(Instruction instruction) {
@@ -135,14 +136,14 @@ public class DebuggerDisassemblyTest extends AbstractGhidraHeadedDebuggerGUITest
 	}
 
 	protected void enableAutoDisassembly() throws Throwable {
-		DebuggerWorkflowService workflowService =
-			addPlugin(tool, DebuggerWorkflowServiceProxyPlugin.class);
-		Set<DebuggerBot> disBot = workflowService.getAllBots()
-				.stream()
-				.filter(b -> b instanceof DisassembleAtPcDebuggerBot)
-				.collect(Collectors.toSet());
-		assertEquals(1, disBot.size());
-		workflowService.enableBots(disBot);
+		listingProvider.setAutoDisassemble(true);
+	}
+
+	protected DebuggerListingActionContext createActionContext(Address start, int len) {
+		TraceProgramView view = tb.trace.getProgramView();
+		ProgramSelection sel = new ProgramSelection(start, start.addWrap(len - 1));
+		return new DebuggerListingActionContext(listingProvider, new ProgramLocation(view, start),
+			sel, null);
 	}
 
 	protected TraceObjectThread createPolyglotTrace(String arch, long offset,
@@ -211,7 +212,8 @@ public class DebuggerDisassemblyTest extends AbstractGhidraHeadedDebuggerGUITest
 			assertX86Nop(instructions.getAt(0, tb.addr(0x00400000)));
 			assertX86Nop(instructions.getAt(0, tb.addr(0x00400001)));
 			assertX86Nop(instructions.getAt(0, tb.addr(0x00400002)));
-			assertNull(instructions.getAt(0, tb.addr(0x00400003)));
+			// NB. The auto disassembler will now proceed into "never known" memory.
+			// It's too much trouble to prevent it, and it's different behavior than the D key.
 		});
 	}
 
@@ -236,10 +238,7 @@ public class DebuggerDisassemblyTest extends AbstractGhidraHeadedDebuggerGUITest
 		// Ensure the mapper is added to the trace
 		assertNotNull(platformService.getMapper(tb.trace, null, 0));
 
-		DBTraceVariableSnapProgramView view = tb.trace.getProgramView();
-		ListingActionContext actionContext = new ListingActionContext(listingProvider,
-			listingProvider, view, new ProgramLocation(view, start),
-			new ProgramSelection(start, start.addWrap(3)), null);
+		ListingActionContext actionContext = createActionContext(start, 4);
 		performAction(disassemblerPlugin.actionDisassemble, actionContext, true);
 		waitForTasks();
 
@@ -271,10 +270,7 @@ public class DebuggerDisassemblyTest extends AbstractGhidraHeadedDebuggerGUITest
 		// Ensure the mapper is added to the trace
 		assertNotNull(platformService.getMapper(tb.trace, null, 0));
 
-		DBTraceVariableSnapProgramView view = tb.trace.getProgramView();
-		ListingActionContext actionContext = new ListingActionContext(listingProvider,
-			listingProvider, view, new ProgramLocation(view, start),
-			new ProgramSelection(start, start.addWrap(3)), null);
+		ListingActionContext actionContext = createActionContext(start, 4);
 		performAction(disassemblerPlugin.actionDisassemble, actionContext, true);
 		waitForTasks();
 
@@ -297,10 +293,7 @@ public class DebuggerDisassemblyTest extends AbstractGhidraHeadedDebuggerGUITest
 		// Ensure the mapper is added to the trace
 		assertNotNull(platformService.getMapper(tb.trace, thread.getObject(), 0));
 
-		DBTraceVariableSnapProgramView view = tb.trace.getProgramView();
-		ListingActionContext actionContext = new ListingActionContext(listingProvider,
-			listingProvider, view, new ProgramLocation(view, start),
-			new ProgramSelection(start, start.addWrap(3)), null);
+		ListingActionContext actionContext = createActionContext(start, 4);
 		performAction(disassemblerPlugin.actionDisassemble, actionContext, true);
 		waitForTasks();
 
@@ -324,10 +317,7 @@ public class DebuggerDisassemblyTest extends AbstractGhidraHeadedDebuggerGUITest
 		// Ensure the mapper is added to the trace
 		assertNotNull(platformService.getMapper(tb.trace, thread.getObject(), 0));
 
-		DBTraceVariableSnapProgramView view = tb.trace.getProgramView();
-		ListingActionContext actionContext = new ListingActionContext(listingProvider,
-			listingProvider, view, new ProgramLocation(view, start),
-			new ProgramSelection(start, start.addWrap(3)), null);
+		ListingActionContext actionContext = createActionContext(start, 4);
 		performAction(disassemblerPlugin.actionDisassemble, actionContext, true);
 		waitForTasks();
 
@@ -339,10 +329,7 @@ public class DebuggerDisassemblyTest extends AbstractGhidraHeadedDebuggerGUITest
 
 	protected void performFixedDisassembleAction(Address start,
 			Predicate<DockingActionIf> actionPred) {
-		DBTraceVariableSnapProgramView view = tb.trace.getProgramView();
-		ListingActionContext actionContext = new ListingActionContext(listingProvider,
-			listingProvider, view, new ProgramLocation(view, start),
-			new ProgramSelection(start, start.addWrap(3)), null);
+		ListingActionContext actionContext = createActionContext(start, 4);
 		DockingActionIf action =
 			runSwing(() -> Unique.assertOne(disassemblerPlugin.getPopupActions(tool, actionContext)
 					.stream()
@@ -419,11 +406,7 @@ public class DebuggerDisassemblyTest extends AbstractGhidraHeadedDebuggerGUITest
 		}
 		waitForDomainObject(tb.trace);
 
-		DBTraceVariableSnapProgramView view = tb.trace.getProgramView();
-		ListingActionContext actionContext = new ListingActionContext(listingProvider,
-			listingProvider, view, new ProgramLocation(view, start),
-			new ProgramSelection(start, start.addWrap(1)), null);
-
+		ListingActionContext actionContext = createActionContext(start, 2);
 		assertTrue(disassemblerPlugin.actionPatchInstruction.isEnabledForContext(actionContext));
 		DebuggerDisassemblerPluginTestHelper helper = new DebuggerDisassemblerPluginTestHelper(
 			disassemblerPlugin, listingProvider, tb.trace.getProgramView());
@@ -455,11 +438,7 @@ public class DebuggerDisassemblyTest extends AbstractGhidraHeadedDebuggerGUITest
 		}
 		waitForDomainObject(tb.trace);
 
-		DBTraceVariableSnapProgramView view = tb.trace.getProgramView();
-		ListingActionContext actionContext = new ListingActionContext(listingProvider,
-			listingProvider, view, new ProgramLocation(view, start),
-			new ProgramSelection(start, start.addWrap(1)), null);
-
+		ListingActionContext actionContext = createActionContext(start, 2);
 		assertTrue(disassemblerPlugin.actionPatchInstruction.isEnabledForContext(actionContext));
 		DebuggerDisassemblerPluginTestHelper helper = new DebuggerDisassemblerPluginTestHelper(
 			disassemblerPlugin, listingProvider, tb.trace.getProgramView());
@@ -489,11 +468,7 @@ public class DebuggerDisassemblyTest extends AbstractGhidraHeadedDebuggerGUITest
 		}
 		waitForDomainObject(tb.trace);
 
-		DBTraceVariableSnapProgramView view = tb.trace.getProgramView();
-		ListingActionContext actionContext = new ListingActionContext(listingProvider,
-			listingProvider, view, new ProgramLocation(view, start),
-			new ProgramSelection(start, start.addWrap(1)), null);
-
+		ListingActionContext actionContext = createActionContext(start, 2);
 		assertTrue(disassemblerPlugin.actionPatchInstruction.isEnabledForContext(actionContext));
 		DebuggerDisassemblerPluginTestHelper helper = new DebuggerDisassemblerPluginTestHelper(
 			disassemblerPlugin, listingProvider, tb.trace.getProgramView());
@@ -528,11 +503,7 @@ public class DebuggerDisassemblyTest extends AbstractGhidraHeadedDebuggerGUITest
 		}
 		waitForDomainObject(tb.trace);
 
-		DBTraceVariableSnapProgramView view = tb.trace.getProgramView();
-		ListingActionContext actionContext = new ListingActionContext(listingProvider,
-			listingProvider, view, new ProgramLocation(view, start),
-			new ProgramSelection(start, start.addWrap(1)), null);
-
+		ListingActionContext actionContext = createActionContext(start, 2);
 		assertTrue(disassemblerPlugin.actionPatchInstruction.isEnabledForContext(actionContext));
 		DebuggerDisassemblerPluginTestHelper helper = new DebuggerDisassemblerPluginTestHelper(
 			disassemblerPlugin, listingProvider, tb.trace.getProgramView());
@@ -544,10 +515,7 @@ public class DebuggerDisassemblyTest extends AbstractGhidraHeadedDebuggerGUITest
 
 	protected Instruction performFixedAssembleAction(Address start,
 			Predicate<FixedPlatformTracePatchInstructionAction> actionPred, String assembly) {
-		DBTraceVariableSnapProgramView view = tb.trace.getProgramView();
-		ListingActionContext actionContext = new ListingActionContext(listingProvider,
-			listingProvider, view, new ProgramLocation(view, start),
-			new ProgramSelection(start, start.addWrap(1)), null);
+		ListingActionContext actionContext = createActionContext(start, 2);
 		FixedPlatformTracePatchInstructionAction action =
 			runSwing(() -> Unique.assertOne(disassemblerPlugin.getPopupActions(tool, actionContext)
 					.stream()

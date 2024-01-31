@@ -120,7 +120,7 @@ public class PcodeOp {
 	// translation.
 	public static final int MULTIEQUAL = 60;  // Output equal to one of inputs, depending on execution
 	public static final int INDIRECT = 61;    // Output probably equals input, but may be indirectly affected
-	public static final int PIECE = 62;       // Output is constructed from multiple peices
+	public static final int PIECE = 62;       // Output is constructed from multiple pieces
 	public static final int SUBPIECE = 63;    // Output is a subpiece of input0, input1=offset into input0
 
 	public static final int CAST = 64;        // Cast from one type to another
@@ -291,6 +291,15 @@ public class PcodeOp {
 	 */
 	public final boolean isAssignment() {
 		return (output != null);
+	}
+
+	/**
+	 * Return true if the PcodeOp is commutative.
+	 * If true, the operation has exactly two inputs that can be switched without affecting the output.
+	 * @return true if the operation is commutative
+	 */
+	public final boolean isCommutative() {
+		return isCommutative(opcode);
 	}
 
 	/**
@@ -714,5 +723,34 @@ public class PcodeOp {
 			throw new UnknownInstructionException();
 		}
 		return i.intValue();
+	}
+
+	/**
+	 * Return true if the given opcode represents a commutative operation.
+	 * If true, the operation has exactly two inputs that can be switched without affecting the output.
+	 * @param opcode is the opcode
+	 * @return true if the operation is commutative
+	 */
+	public static boolean isCommutative(int opcode) {
+		switch (opcode) {
+			case PcodeOp.INT_EQUAL:
+			case PcodeOp.INT_NOTEQUAL:
+			case PcodeOp.INT_ADD:
+			case PcodeOp.INT_XOR:
+			case PcodeOp.INT_AND:
+			case PcodeOp.INT_OR:
+			case PcodeOp.INT_MULT:
+			case PcodeOp.BOOL_XOR:
+			case PcodeOp.BOOL_AND:
+			case PcodeOp.BOOL_OR:
+			case PcodeOp.FLOAT_EQUAL:
+			case PcodeOp.FLOAT_NOTEQUAL:
+			case PcodeOp.FLOAT_ADD:
+			case PcodeOp.FLOAT_MULT:
+			case PcodeOp.INT_CARRY:
+			case PcodeOp.INT_SCARRY:
+				return true;
+		}
+		return false;
 	}
 }

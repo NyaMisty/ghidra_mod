@@ -27,8 +27,9 @@ import javax.swing.table.*;
 
 import docking.widgets.table.*;
 import docking.widgets.table.DefaultEnumeratedColumnTableModel.EnumeratedTableColumn;
-import ghidra.app.plugin.core.debug.DebuggerCoordinates;
 import ghidra.app.services.*;
+import ghidra.debug.api.modules.DebuggerStaticMappingChangeListener;
+import ghidra.debug.api.tracemgr.DebuggerCoordinates;
 import ghidra.docking.settings.Settings;
 import ghidra.framework.plugintool.AutoService;
 import ghidra.framework.plugintool.PluginTool;
@@ -41,6 +42,7 @@ import ghidra.trace.model.*;
 import ghidra.trace.model.Trace.TraceMemoryBytesChangeType;
 import ghidra.trace.model.Trace.TraceStackChangeType;
 import ghidra.trace.model.memory.TraceMemorySpace;
+import ghidra.trace.model.program.TraceProgramView;
 import ghidra.trace.model.stack.TraceStack;
 import ghidra.trace.model.stack.TraceStackFrame;
 import ghidra.trace.model.thread.TraceThread;
@@ -58,6 +60,7 @@ public class DebuggerLegacyStackPanel extends JPanel {
 		LEVEL("Level", Integer.class, StackFrameRow::getFrameLevel),
 		PC("PC", Address.class, StackFrameRow::getProgramCounter),
 		FUNCTION("Function", ghidra.program.model.listing.Function.class, StackFrameRow::getFunction),
+		MODULE("Module", String.class, StackFrameRow::getModule),
 		COMMENT("Comment", String.class, StackFrameRow::getComment, StackFrameRow::setComment, StackFrameRow::isCommentable);
 
 		private final String header;
@@ -159,7 +162,11 @@ public class DebuggerLegacyStackPanel extends JPanel {
 			if (space.getThread() != curThread || space.getFrameLevel() != 0) {
 				return;
 			}
-			if (!current.getView().getViewport().containsAnyUpper(range.getLifespan())) {
+			TraceProgramView view = current.getView();
+			if (view == null) {
+				return;
+			}
+			if (!view.getViewport().containsAnyUpper(range.getLifespan())) {
 				return;
 			}
 			List<StackFrameRow> stackData = stackTableModel.getModelData();
@@ -286,6 +293,8 @@ public class DebuggerLegacyStackPanel extends JPanel {
 		pcCol.setCellRenderer(boldCurrentRenderer);
 		TableColumn funcCol = columnModel.getColumn(StackTableColumns.FUNCTION.ordinal());
 		funcCol.setCellRenderer(boldCurrentRenderer);
+		TableColumn modCol = columnModel.getColumn(StackTableColumns.MODULE.ordinal());
+		modCol.setCellRenderer(boldCurrentRenderer);
 		TableColumn commCol = columnModel.getColumn(StackTableColumns.COMMENT.ordinal());
 		commCol.setCellRenderer(boldCurrentRenderer);
 	}
@@ -353,14 +362,15 @@ public class DebuggerLegacyStackPanel extends JPanel {
 		currentStack = null;
 
 		Trace curTrace = current.getTrace();
-		TraceMemorySpace regs =
-			curTrace.getMemoryManager().getMemoryRegisterSpace(current.getThread(), false);
-		if (regs == null) {
+		Register pc = curTrace.getBaseLanguage().getProgramCounter();
+		if (pc == null) {
 			contextChanged();
 			return;
 		}
-		Register pc = curTrace.getBaseLanguage().getProgramCounter();
-		if (pc == null) {
+		TraceMemorySpace regs = pc.getAddressSpace().isRegisterSpace()
+				? curTrace.getMemoryManager().getMemoryRegisterSpace(current.getThread(), false)
+				: curTrace.getMemoryManager().getMemorySpace(pc.getAddressSpace(), false);
+		if (regs == null) {
 			contextChanged();
 			return;
 		}

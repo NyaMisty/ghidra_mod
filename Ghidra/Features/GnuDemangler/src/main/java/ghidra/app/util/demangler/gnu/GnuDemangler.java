@@ -19,12 +19,7 @@ import java.io.File;
 import java.io.IOException;
 
 import generic.jar.ResourceFile;
-import ghidra.app.util.demangler.DemangledAddressTable;
-import ghidra.app.util.demangler.DemangledException;
-import ghidra.app.util.demangler.DemangledFunction;
-import ghidra.app.util.demangler.DemangledObject;
-import ghidra.app.util.demangler.Demangler;
-import ghidra.app.util.demangler.DemanglerOptions;
+import ghidra.app.util.demangler.*;
 import ghidra.app.util.opinion.ElfLoader;
 import ghidra.app.util.opinion.MachoLoader;
 import ghidra.framework.Application;
@@ -55,9 +50,9 @@ public class GnuDemangler implements Demangler {
 		if (isELF(executableFormat) || isMacho(executableFormat)) {
 			return true;
 		}
-		
-		String compiler = program.getCompiler(); 
-		if(compiler != null && compiler.contains("gcc")) {
+
+		String compiler = program.getCompiler();
+		if (compiler != null && compiler.contains("gcc")) {
 			return true;
 		}
 
@@ -66,6 +61,7 @@ public class GnuDemangler implements Demangler {
 		if (!specId.toLowerCase().contains("windows")) {
 			return true;
 		}
+
 		return false;
 	}
 
@@ -97,7 +93,7 @@ public class GnuDemangler implements Demangler {
 			}
 		}
 		else if (mangled.startsWith("__Z")) {
-			mangled = mangled.substring(1);//removed first underscore....
+			mangled = mangled.substring(1);
 		}
 
 		boolean isDwarf = false;
@@ -116,7 +112,8 @@ public class GnuDemangler implements Demangler {
 			}
 
 			boolean onlyKnownPatterns = options.demangleOnlyKnownPatterns();
-			DemangledObject demangledObject = parse(mangled, process, demangled, onlyKnownPatterns);
+			DemangledObject demangledObject =
+				parse(originalMangled, process, demangled, onlyKnownPatterns);
 			if (demangledObject == null) {
 				return demangledObject;
 			}

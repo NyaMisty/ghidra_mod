@@ -45,8 +45,7 @@ import ghidra.app.plugin.core.datamgr.editor.DataTypeEditorManager;
 import ghidra.app.plugin.core.datamgr.tree.ArchiveNode;
 import ghidra.app.plugin.core.datamgr.util.DataDropOnBrowserHandler;
 import ghidra.app.plugin.core.datamgr.util.DataTypeChooserDialog;
-import ghidra.app.services.CodeViewerService;
-import ghidra.app.services.DataTypeManagerService;
+import ghidra.app.services.*;
 import ghidra.app.util.HelpTopics;
 import ghidra.framework.Application;
 import ghidra.framework.main.OpenVersionedFileDialog;
@@ -62,7 +61,10 @@ import ghidra.program.model.listing.DataTypeArchive;
 import ghidra.program.model.listing.Program;
 import ghidra.util.*;
 import ghidra.util.datastruct.LRUMap;
+import ghidra.util.exception.CancelledException;
+import ghidra.util.exception.VersionException;
 import ghidra.util.task.TaskLauncher;
+import ghidra.util.task.TaskMonitor;
 
 /**
  * Plugin to pop up the dialog to manage data types in the program
@@ -78,11 +80,11 @@ import ghidra.util.task.TaskLauncher;
 	description = "Provides the window for managing and categorizing dataTypes.  " +
 			"The datatype display shows all built-in datatypes, datatypes in the " +
 			"current program, and datatypes in all open archives.",
-	servicesProvided = { DataTypeManagerService.class }
+	servicesProvided = { DataTypeManagerService.class, DataTypeArchiveService.class }
 )
 //@formatter:on
-public class DataTypeManagerPlugin extends ProgramPlugin
-		implements DomainObjectListener, DataTypeManagerService, PopupActionProvider {
+public class DataTypeManagerPlugin extends ProgramPlugin implements DomainObjectListener,
+		DataTypeManagerService, DataTypeArchiveService, PopupActionProvider {
 
 	private static final String EXTENSIONS_PATH_PREFIX = Path.GHIDRA_HOME + "/Extensions";
 
@@ -278,7 +280,7 @@ public class DataTypeManagerPlugin extends ProgramPlugin
 
 	@Override
 	public void domainObjectChanged(DomainObjectChangedEvent event) {
-		if (event.containsEvent(DomainObject.DO_OBJECT_RESTORED)) {
+		if (event.contains(DomainObjectEvent.RESTORED)) {
 			Object source = event.getSource();
 			if (source instanceof DataTypeManagerDomainObject) {
 				DataTypeManagerDomainObject domainObject = (DataTypeManagerDomainObject) source;
@@ -287,7 +289,7 @@ public class DataTypeManagerPlugin extends ProgramPlugin
 				editorManager.domainObjectRestored(domainObject);
 			}
 		}
-		else if (event.containsEvent(DomainObject.DO_OBJECT_RENAMED)) {
+		else if (event.contains(DomainObjectEvent.RENAMED)) {
 			provider.programRenamed();
 		}
 	}
@@ -361,7 +363,7 @@ public class DataTypeManagerPlugin extends ProgramPlugin
 	public DataTypesProvider createProvider() {
 
 		DataTypesProvider newProvider = new DataTypesProvider(this, SEARCH_PROVIDER_NAME, true);
-		newProvider.setIncludeDataTypeMembersInFilter(provider.includeDataMembersInSearch());
+		newProvider.setIncludeDataTypeMembersInFilter(provider.isIncludeDataMembersInSearch());
 		newProvider.setFilteringArrays(provider.isFilteringArrays());
 		newProvider.setFilteringPointers(provider.isFilteringPointers());
 		return newProvider;
@@ -557,15 +559,28 @@ public class DataTypeManagerPlugin extends ProgramPlugin
 		return dataTypeManagerHandler.openArchive(archiveName);
 	}
 
+	@Override
+	public DataTypeManager openArchive(ResourceFile file, boolean acquireWriteLock)
+			throws IOException, DuplicateIdException {
+		Archive archive = openArchive(file.getFile(true), acquireWriteLock);
+		return archive.getDataTypeManager();
+	}
+
+	@Override
+	public DataTypeManager openArchive(DomainFile domainFile, TaskMonitor monitor)
+			throws VersionException, CancelledException, IOException, DuplicateIdException {
+		DataTypeArchive archive = openArchive(domainFile);
+		return archive.getDataTypeManager();
+	}
+
 	public List<Archive> getAllArchives() {
 		return dataTypeManagerHandler.getAllArchives();
 	}
 
 	public void openProjectDataTypeArchive() {
 
-		OpenVersionedFileDialog<DataTypeArchive> dialog =
-			new OpenVersionedFileDialog<>(tool, "Open Project Data Type Archive",
-				DataTypeArchive.class);
+		OpenVersionedFileDialog<DataTypeArchive> dialog = new OpenVersionedFileDialog<>(tool,
+			"Open Project Data Type Archive", DataTypeArchive.class);
 		dialog.setHelpLocation(new HelpLocation(HelpTopics.PROGRAM, "Open_File_Dialog"));
 		dialog.addOkActionListener(ev -> {
 			DomainFile domainFile = dialog.getDomainFile();

@@ -30,11 +30,11 @@ import javax.swing.table.TableColumnModel;
 import docking.ActionContext;
 import docking.widgets.table.CustomToStringCellRenderer;
 import docking.widgets.table.DefaultEnumeratedColumnTableModel.EnumeratedTableColumn;
-import ghidra.app.plugin.core.debug.DebuggerCoordinates;
 import ghidra.app.plugin.core.debug.gui.DebuggerResources;
 import ghidra.app.plugin.core.debug.utils.DebouncedRowWrappedEnumeratedColumnTableModel;
 import ghidra.app.services.DebuggerListingService;
-import ghidra.framework.model.DomainObject;
+import ghidra.debug.api.tracemgr.DebuggerCoordinates;
+import ghidra.framework.model.DomainObjectEvent;
 import ghidra.framework.plugintool.AutoService;
 import ghidra.framework.plugintool.PluginTool;
 import ghidra.framework.plugintool.annotation.AutoServiceConsumed;
@@ -107,9 +107,8 @@ public class DebuggerLegacyRegionsPanel extends JPanel {
 		}
 	}
 
-	protected static class RegionTableModel
-			extends DebouncedRowWrappedEnumeratedColumnTableModel< //
-					RegionTableColumns, ObjectKey, RegionRow, TraceMemoryRegion> {
+	protected static class RegionTableModel extends DebouncedRowWrappedEnumeratedColumnTableModel< //
+			RegionTableColumns, ObjectKey, RegionRow, TraceMemoryRegion> {
 
 		public RegionTableModel(PluginTool tool) {
 			super(tool, "Regions", RegionTableColumns.class, TraceMemoryRegion::getObjectKey,
@@ -142,7 +141,7 @@ public class DebuggerLegacyRegionsPanel extends JPanel {
 
 	private class RegionsListener extends TraceDomainObjectListener {
 		public RegionsListener() {
-			listenForUntyped(DomainObject.DO_OBJECT_RESTORED, e -> objectRestored());
+			listenForUntyped(DomainObjectEvent.RESTORED, e -> objectRestored());
 
 			listenFor(TraceMemoryRegionChangeType.ADDED, this::regionAdded);
 			listenFor(TraceMemoryRegionChangeType.CHANGED, this::regionChanged);

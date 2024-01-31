@@ -51,6 +51,7 @@
         <LI>Raw Binary</LI>
         <LI>Relocatable Object Module Format (OMF)</LI>
         <LI>XML Input Format</LI>
+        <LI>SARIF Input Format</LI>
       </UL>
     </BLOCKQUOTE>
 
@@ -384,6 +385,16 @@
           the program is run. These sections will not be stored in a special address space called
           "other".</P>
         </BLOCKQUOTE>
+        
+        <H4>Max Zero-Segment Discard Size</H4>
+
+        <BLOCKQUOTE>
+          <P>When both section-headers and program-headers are present, this option controls the 
+          maximum byte-size of a non-section-based memory block which has a zero-fill which will
+          be discarded.  This is intended to allow section-alignment load sequences to be ignored
+          and discarded.  A value of "0" will disable all such discards.  The default value is 
+          255-bytes.</P>
+        </BLOCKQUOTE>
       </BLOCKQUOTE>
 
       <H3>Intel Hex Options<A name="Options_Intel_Hex"/></H3>
@@ -670,6 +681,16 @@
           Names</A>.</P>
         </BLOCKQUOTE>
       </BLOCKQUOTE>
+      
+      <H3>SARIF Options <A name="sarif_options"><A name="Options_SARIF_Input_Format"/></A></H3>
+
+      <BLOCKQUOTE>
+        <P>The SARIF format is used to load from a SARIF formatted file. The options are simply
+        switches for which types of program information to import and are identical to the options
+        specified above for XML.</P>
+      </BLOCKQUOTE>
+
+
       </BLOCKQUOTE>
 
       <H2><A name="Library_Paths"></A>Library Search Path</H2>

@@ -45,7 +45,7 @@ import utility.function.Callback;
  * all the gui elements to appear in the dialog, then use tool.showDialog() to display your dialog.
  */
 public class DialogComponentProvider
-		implements ActionContextProvider, StatusListener, TaskListener {
+	implements ActionContextProvider, StatusListener, TaskListener {
 
 	private static final Color FG_COLOR_ALERT = new GColor("color.fg.dialog.status.alert");
 	private static final Color FG_COLOR_ERROR = new GColor("color.fg.dialog.status.error");
@@ -134,7 +134,7 @@ public class DialogComponentProvider
 	 *        doing so.
 	 */
 	protected DialogComponentProvider(String title, boolean modal, boolean includeStatus,
-			boolean includeButtons, boolean canRunTasks) {
+		boolean includeButtons, boolean canRunTasks) {
 		this.modal = modal;
 		this.title = title;
 		rootPanel = new JPanel(new BorderLayout()) {
@@ -642,7 +642,7 @@ public class DialogComponentProvider
 	private void doSetStatusText(String text, MessageType type, boolean alert) {
 
 		SystemUtilities
-				.assertThisIsTheSwingThread("Setting text must be performed on the Swing thread");
+			.assertThisIsTheSwingThread("Setting text must be performed on the Swing thread");
 
 		statusLabel.setText(text);
 		statusLabel.setForeground(getStatusColor(type));
@@ -677,7 +677,7 @@ public class DialogComponentProvider
 
 		// must be on Swing; this allows us to synchronize the 'alerting' flag
 		SystemUtilities
-				.assertThisIsTheSwingThread("Alerting must be performed on the Swing thread");
+			.assertThisIsTheSwingThread("Alerting must be performed on the Swing thread");
 
 		if (isAlerting) {
 			return;
@@ -736,7 +736,7 @@ public class DialogComponentProvider
 	}
 
 	protected void showProgressBar(String localTitle, boolean hasProgress, boolean canCancel,
-			int delay) {
+		int delay) {
 		taskMonitorComponent.reset();
 		Runnable r = () -> {
 			if (delay <= 0) {
@@ -852,7 +852,7 @@ public class DialogComponentProvider
 	 * @see #hideTaskMonitorComponent()
 	 */
 	public TaskMonitor showTaskMonitorComponent(String localTitle, boolean hasProgress,
-			boolean canCancel) {
+		boolean canCancel) {
 		showProgressBar(localTitle, hasProgress, canCancel, DEFAULT_DELAY);
 		return taskMonitorComponent;
 	}
@@ -1177,14 +1177,14 @@ public class DialogComponentProvider
 		}
 
 		if (event == null) {
-			return new ActionContext(null, c);
+			return new DefaultActionContext(null, c);
 		}
 
 		Component sourceComponent = event.getComponent();
 		if (sourceComponent != null) {
 			c = sourceComponent;
 		}
-		return new ActionContext(null, c).setSourceObject(event.getSource());
+		return new DefaultActionContext(null, c).setSourceObject(event.getSource());
 	}
 
 	/**
@@ -1194,7 +1194,7 @@ public class DialogComponentProvider
 	protected void notifyContextChanged() {
 		ActionContext context = getActionContext(null);
 		if (context == null) {
-			context = new ActionContext();
+			context = new DefaultActionContext();
 		}
 		Set<DockingActionIf> keySet = actionMap.keySet();
 		for (DockingActionIf action : keySet) {

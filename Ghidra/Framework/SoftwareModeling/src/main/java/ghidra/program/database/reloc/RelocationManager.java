@@ -31,6 +31,7 @@ import ghidra.program.model.mem.Memory;
 import ghidra.program.model.reloc.Relocation;
 import ghidra.program.model.reloc.Relocation.Status;
 import ghidra.program.model.reloc.RelocationTable;
+import ghidra.program.util.ProgramEvent;
 import ghidra.util.Lock;
 import ghidra.util.exception.CancelledException;
 import ghidra.util.exception.VersionException;
@@ -147,9 +148,14 @@ public class RelocationManager implements RelocationTable, ManagerDB {
 		try {
 			byte flags = RelocationDBAdapter.getFlags(status, 0);
 			adapter.add(addr, flags, type, values, bytes, symbolName);
-			return new Relocation(addr, status, type, values,
-				getOriginalBytes(addr, status, bytes, 0),
-				symbolName);
+			Relocation reloc = new Relocation(addr, status, type, values,
+				getOriginalBytes(addr, status, bytes, 0), symbolName);
+
+			// fire event
+			// TODO: full change support is missing
+			program.setChanged(ProgramEvent.RELOCATION_ADDED, null, reloc);
+
+			return reloc;
 		}
 		catch (IOException e) {
 			program.dbError(e);
@@ -167,9 +173,14 @@ public class RelocationManager implements RelocationTable, ManagerDB {
 		try {
 			byte flags = RelocationDBAdapter.getFlags(status, byteLength);
 			adapter.add(addr, flags, type, values, null, symbolName);
-			return new Relocation(addr, status, type, values,
-				getOriginalBytes(addr, status, null, byteLength),
-				symbolName);
+			Relocation reloc = new Relocation(addr, status, type, values,
+				getOriginalBytes(addr, status, null, byteLength), symbolName);
+
+			// fire event
+			// TODO: full change support is missing
+			program.setChanged(ProgramEvent.RELOCATION_ADDED, null, reloc);
+
+			return reloc;
 		}
 		catch (IOException e) {
 			program.dbError(e);
@@ -236,12 +247,11 @@ public class RelocationManager implements RelocationTable, ManagerDB {
 		int length = RelocationDBAdapter.getByteLength(flags);
 		BinaryCodedField valuesField =
 			new BinaryCodedField((BinaryField) rec.getFieldValue(RelocationDBAdapter.VALUE_COL));
-		byte[] originalBytes =
-			getOriginalBytes(addr, status, rec.getBinaryData(RelocationDBAdapter.BYTES_COL),
-				length);
+		byte[] originalBytes = getOriginalBytes(addr, status,
+			rec.getBinaryData(RelocationDBAdapter.BYTES_COL), length);
 		return new Relocation(addr, status, rec.getIntValue(RelocationDBAdapter.TYPE_COL),
-			valuesField.getLongArray(),
-			originalBytes, rec.getString(RelocationDBAdapter.SYMBOL_NAME_COL));
+			valuesField.getLongArray(), originalBytes,
+			rec.getString(RelocationDBAdapter.SYMBOL_NAME_COL));
 	}
 
 	@Override
@@ -372,7 +382,8 @@ public class RelocationManager implements RelocationTable, ManagerDB {
 	}
 
 	@Override
-	public void moveAddressRange(Address fromAddr, Address toAddr, long length, TaskMonitor monitor) {
+	public void moveAddressRange(Address fromAddr, Address toAddr, long length,
+			TaskMonitor monitor) {
 		// do nothing here
 	}
 

@@ -19,6 +19,7 @@ import java.util.Date;
 
 import ghidra.framework.store.LockException;
 import ghidra.program.database.IntRangeMap;
+import ghidra.program.database.ProgramOverlayAddressSpace;
 import ghidra.program.database.data.DataTypeUtilities;
 import ghidra.program.database.map.AddressMap;
 import ghidra.program.model.address.*;
@@ -30,7 +31,9 @@ import ghidra.program.model.reloc.RelocationTable;
 import ghidra.program.model.symbol.*;
 import ghidra.program.model.util.AddressSetPropertyMap;
 import ghidra.program.model.util.PropertyMapManager;
+import ghidra.util.InvalidNameException;
 import ghidra.util.exception.DuplicateNameException;
+import ghidra.util.exception.NotFoundException;
 import ghidra.util.task.TaskMonitor;
 
 /**
@@ -46,7 +49,7 @@ import ghidra.util.task.TaskMonitor;
  * For example, the createCodeUnit() method of listing will fail if memory is
  * undefined at the address where the codeUnit is to be created.
  */
-public interface Program extends DataTypeManagerDomainObject {
+public interface Program extends DataTypeManagerDomainObject, ProgramArchitecture {
 
 	public static final String ANALYSIS_PROPERTIES = "Analyzers";
 	public static final String DISASSEMBLER_PROPERTIES = "Disassembler";
@@ -85,8 +88,10 @@ public interface Program extends DataTypeManagerDomainObject {
 	/**
 	 * Get the internal program address map
 	 * @return internal address map
+	 * @deprecated Method intended for internal ProgramDB use and is not intended for general use.
+	 * This method may be removed from this interface in a future release.
 	 */
-	// FIXME!! Should not expose on interface - anything using this should use ProgramDB or avoid using map!
+	@Deprecated(forRemoval = true)
 	public AddressMap getAddressMap();
 
 	/**
@@ -115,7 +120,6 @@ public interface Program extends DataTypeManagerDomainObject {
 	public SymbolTable getSymbolTable();
 
 	/**
-	
 	 * Returns the external manager.
 	 * @return the external manager
 	 */
@@ -268,12 +272,14 @@ public interface Program extends DataTypeManagerDomainObject {
 	 * Returns the language used by this program.
 	 * @return the language used by this program.
 	 */
+	@Override
 	public Language getLanguage();
 
 	/** 
 	 * Returns the CompilerSpec currently used by this program.
 	 * @return the compilerSpec currently used by this program.
 	 */
+	@Override
 	public CompilerSpec getCompilerSpec();
 
 	/**
@@ -322,6 +328,7 @@ public interface Program extends DataTypeManagerDomainObject {
 	 *  Returns the AddressFactory for this program.
 	 *  @return the program address factory
 	 */
+	@Override
 	public AddressFactory getAddressFactory();
 
 	/**
@@ -348,6 +355,45 @@ public interface Program extends DataTypeManagerDomainObject {
 	 * NOTE: Over-using this method can adversely affect system performance.
 	 */
 	public void invalidate();
+
+	/**
+	 * Create a new overlay space based upon the given base AddressSpace
+	 * @param overlaySpaceName the name of the new overlay space.
+	 * @param baseSpace the base AddressSpace to overlay (i.e., overlayed-space)	
+	 * @return the new overlay space
+	 * @throws DuplicateNameException if an address space already exists with specified overlaySpaceName.
+	 * @throws LockException if the program is shared and not checked out exclusively.
+	 * @throws IllegalStateException if image base override is active
+	 * @throws InvalidNameException if overlaySpaceName contains invalid characters
+	 */
+	public ProgramOverlayAddressSpace createOverlaySpace(String overlaySpaceName,
+			AddressSpace baseSpace) throws IllegalStateException, DuplicateNameException,
+			InvalidNameException, LockException;
+
+	/**
+	 * Rename an existing overlay address space.  
+	 * NOTE: This experimental method has known limitations with existing {@link Address} and 
+	 * {@link AddressSpace} objects following an undo/redo which may continue to refer to the old 
+	 * overlay name which may lead to unxpected errors.
+	 * @param overlaySpaceName overlay address space name
+	 * @param newName new name for overlay
+	 * @throws NotFoundException if the specified overlay space was not found
+	 * @throws InvalidNameException if new name is invalid
+	 * @throws DuplicateNameException if new name already used by another address space
+	 * @throws LockException if program does not has exclusive access
+	 */
+	public void renameOverlaySpace(String overlaySpaceName, String newName)
+			throws NotFoundException, InvalidNameException, DuplicateNameException, LockException;
+
+	/**
+	 * Remove the specified overlay address space from this program.
+	 * @param overlaySpaceName overlay address space name
+	 * @return true if successfully removed, else false if blocks still make use of overlay space.
+	 * @throws LockException if program does not has exclusive access
+	 * @throws NotFoundException if specified overlay space not found in program
+	 */
+	public boolean removeOverlaySpace(String overlaySpaceName)
+			throws LockException, NotFoundException;
 
 	/**
 	 * Returns the register with the given name;

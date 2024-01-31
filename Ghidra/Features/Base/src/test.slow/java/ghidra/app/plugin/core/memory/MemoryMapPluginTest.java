@@ -28,6 +28,7 @@ import javax.swing.table.TableModel;
 import org.junit.*;
 
 import docking.ActionContext;
+import docking.DefaultActionContext;
 import docking.action.DockingActionIf;
 import ghidra.app.cmd.memory.*;
 import ghidra.app.plugin.core.codebrowser.CodeBrowserPlugin;
@@ -139,7 +140,7 @@ public class MemoryMapPluginTest extends AbstractGhidraHeadedIntegrationTest {
 	private ActionContext getActionContext() {
 		ActionContext context = provider.getActionContext(null);
 		if (context == null) {
-			return new ActionContext();
+			return new DefaultActionContext();
 		}
 		return context;
 	}
@@ -195,7 +196,7 @@ public class MemoryMapPluginTest extends AbstractGhidraHeadedIntegrationTest {
 		final JTextField editorField = (JTextField) editorComponent;
 		editorField.selectAll();
 		runSwing(() -> editorField.requestFocus());
-		waitForPostedSwingRunnables();
+		waitForSwing();
 
 		triggerText(editorField, ".myText\n");
 

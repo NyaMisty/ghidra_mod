@@ -21,8 +21,7 @@ import java.util.*;
 import db.DBChangeSet;
 import db.DBHandle;
 import db.buffers.LocalBufferFile.BufferFileFilter;
-import ghidra.framework.ShutdownHookRegistry;
-import ghidra.framework.ShutdownPriority;
+import ghidra.framework.*;
 import ghidra.util.Msg;
 import ghidra.util.SystemUtilities;
 import ghidra.util.datastruct.ObjectArray;
@@ -1499,7 +1498,7 @@ public class BufferMgr {
 
 				for (int id = 0; id < indexCnt; id++) {
 
-					monitor.checkCanceled();
+					monitor.checkCancelled();
 					monitor.setProgress(id);
 
 					// Check for cached buffer
@@ -1654,7 +1653,7 @@ public class BufferMgr {
 			// Recover free buffer list
 			int[] freeIndexes = recoveryFile.getFreeIndexList();
 			for (int index : freeIndexes) {
-				monitor.checkCanceled();
+				monitor.checkCancelled();
 				if (index >= origIndexCount) {
 					// Newly allocated free buffer
 					BufferNode node = createNewBufferNode(index, currentCheckpointHead, null);
@@ -1678,7 +1677,7 @@ public class BufferMgr {
 			Arrays.sort(bufferIndexes);
 			for (int i = 0; i < bufferIndexes.length; i++) {
 
-				monitor.checkCanceled();
+				monitor.checkCancelled();
 				monitor.setProgress(i + 1);
 
 				// Get recovery buffer
@@ -1911,7 +1910,7 @@ public class BufferMgr {
 		// Empty buffers will be flushed when outFile is closed
 		int bufCount = 0;
 		for (int id = 0; id < indexCnt; id++) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			BufferNode node = getCachedBufferNode(id);
 			if (node != null) {
 				// check nod which resides in cache
@@ -1933,7 +1932,7 @@ public class BufferMgr {
 		// write/update all non-empty buffers
 		try (OutputBlockStream out = LocalBufferFile.getOutputBlockStream(outFile, bufCount)) {
 			for (int id = 0; id < indexCnt; id++) {
-				monitor.checkCanceled();
+				monitor.checkCancelled();
 				monitor.setProgress(id);
 
 				// get buffer node from cache
@@ -2049,7 +2048,7 @@ public class BufferMgr {
 	}
 
 	public static void cleanupOldCacheFiles() {
-		File tmpDir = new File(System.getProperty("java.io.tmpdir"));
+		File tmpDir = Application.getUserTempDirectory();
 		File[] cacheFiles =
 			tmpDir.listFiles(new BufferFileFilter(CACHE_FILE_PREFIX, CACHE_FILE_EXT));
 		if (cacheFiles == null) {

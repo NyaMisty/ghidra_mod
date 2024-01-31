@@ -16,7 +16,7 @@
 package ghidra.framework.data;
 
 import java.io.IOException;
-import java.util.LinkedList;
+import java.util.*;
 
 import ghidra.framework.model.*;
 import ghidra.framework.model.TransactionInfo.Status;
@@ -27,10 +27,8 @@ import ghidra.util.datastruct.WeakSet;
 
 class DomainObjectTransactionManager extends AbstractTransactionManager {
 
-	private LinkedList<DomainObjectDBTransaction> undoList =
-		new LinkedList<>();
-	private LinkedList<DomainObjectDBTransaction> redoList =
-		new LinkedList<>();
+	private LinkedList<DomainObjectDBTransaction> undoList = new LinkedList<>();
+	private LinkedList<DomainObjectDBTransaction> redoList = new LinkedList<>();
 
 	private WeakSet<TransactionListener> transactionListeners =
 		WeakDataStructureFactory.createCopyOnWriteWeakSet();
@@ -94,7 +92,7 @@ class DomainObjectTransactionManager extends AbstractTransactionManager {
 			domainObj.clearCache(false);
 		}
 
-		domainObj.fireEvent(new DomainObjectChangeRecord(DomainObject.DO_OBJECT_RESTORED));
+		domainObj.fireEvent(new DomainObjectChangeRecord(DomainObjectEvent.RESTORED));
 		if (notify) {
 			notifyEndTransaction();
 		}
@@ -184,7 +182,7 @@ class DomainObjectTransactionManager extends AbstractTransactionManager {
 				if (notify) {
 					notifyEndTransaction();
 				}
-				domainObj.fireEvent(new DomainObjectChangeRecord(DomainObject.DO_OBJECT_RESTORED));
+				domainObj.fireEvent(new DomainObjectChangeRecord(DomainObjectEvent.RESTORED));
 				transaction.restoreToolStates(true);
 				transaction = null;
 			}
@@ -242,6 +240,25 @@ class DomainObjectTransactionManager extends AbstractTransactionManager {
 	}
 
 	@Override
+	List<String> getAllUndoNames() {
+		return getDescriptions(undoList);
+	}
+
+	@Override
+	List<String> getAllRedoNames() {
+		return getDescriptions(redoList);
+	}
+
+	private List<String> getDescriptions(List<DomainObjectDBTransaction> list) {
+		List<String> descriptions = new ArrayList<>();
+		for (DomainObjectDBTransaction tx : list) {
+			descriptions.add(tx.getDescription());
+		}
+		Collections.reverse(descriptions);
+		return descriptions;
+	}
+
+	@Override
 	TransactionInfo getCurrentTransactionInfo() {
 		return transaction;
 	}
@@ -255,7 +272,7 @@ class DomainObjectTransactionManager extends AbstractTransactionManager {
 			if (domainObj.changeSet != null) {
 				domainObj.changeSet.redo();
 			}
-			domainObj.fireEvent(new DomainObjectChangeRecord(DomainObject.DO_OBJECT_RESTORED));
+			domainObj.fireEvent(new DomainObjectChangeRecord(DomainObjectEvent.RESTORED));
 			undoList.addLast(t);
 			t.restoreToolStates(false);
 			if (notify) {
@@ -274,7 +291,7 @@ class DomainObjectTransactionManager extends AbstractTransactionManager {
 				domainObj.changeSet.undo();
 			}
 			domainObj.clearCache(false);
-			domainObj.fireEvent(new DomainObjectChangeRecord(DomainObject.DO_OBJECT_RESTORED));
+			domainObj.fireEvent(new DomainObjectChangeRecord(DomainObjectEvent.RESTORED));
 			redoList.addLast(t);
 			t.restoreToolStates(true);
 			if (notify) {

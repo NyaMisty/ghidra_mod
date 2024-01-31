@@ -15,10 +15,12 @@
  */
 package ghidra.trace.database.stack;
 
-import java.util.List;
+import java.util.*;
 
 import ghidra.dbg.target.TargetStackFrame;
+import ghidra.dbg.target.schema.TargetObjectSchema;
 import ghidra.dbg.util.PathUtils;
+import ghidra.framework.model.EventType;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.CodeUnit;
 import ghidra.trace.database.target.DBTraceObject;
@@ -37,13 +39,23 @@ import ghidra.trace.util.TraceChangeRecord;
 import ghidra.util.LockHold;
 
 public class DBTraceObjectStackFrame implements TraceObjectStackFrame, DBTraceObjectInterface {
+	private static final Map<TargetObjectSchema, Set<String>> KEYS_BY_SCHEMA = new WeakHashMap<>();
+
 	private final DBTraceObject object;
+	private final Set<String> keys;
+
 	// TODO: Memorizing life is not optimal.
 	// GP-1887 means to expose multiple lifespans in, e.g., TraceThread
 	private LifeSet life = new DefaultLifeSet();
 
 	public DBTraceObjectStackFrame(DBTraceObject object) {
 		this.object = object;
+
+		TargetObjectSchema schema = object.getTargetSchema();
+		synchronized (KEYS_BY_SCHEMA) {
+			keys = KEYS_BY_SCHEMA.computeIfAbsent(schema,
+				s -> Set.of(schema.checkAliasedAttribute(TargetStackFrame.PC_ATTRIBUTE_NAME)));
+		}
 	}
 
 	@Override
@@ -77,8 +89,8 @@ public class DBTraceObjectStackFrame implements TraceObjectStackFrame, DBTraceOb
 
 	@Override
 	public Address getProgramCounter(long snap) {
-		return TraceObjectInterfaceUtils.getValue(object, snap,
-			TargetStackFrame.PC_ATTRIBUTE_NAME, Address.class, null);
+		return TraceObjectInterfaceUtils.getValue(object, snap, TargetStackFrame.PC_ATTRIBUTE_NAME,
+			Address.class, null);
 	}
 
 	@Override
@@ -117,8 +129,7 @@ public class DBTraceObjectStackFrame implements TraceObjectStackFrame, DBTraceOb
 	public void setComment(long snap, String comment) {
 		/* See rant in getComment */
 		try (LockHold hold = object.getTrace().lockWrite()) {
-			TraceObjectValue pcAttr =
-				object.getValue(snap, TargetStackFrame.PC_ATTRIBUTE_NAME);
+			TraceObjectValue pcAttr = object.getValue(snap, TargetStackFrame.PC_ATTRIBUTE_NAME);
 			object.getTrace()
 					.getCommentAdapter()
 					.setComment(pcAttr.getLifespan(), (Address) pcAttr.getValue(),
@@ -136,7 +147,7 @@ public class DBTraceObjectStackFrame implements TraceObjectStackFrame, DBTraceOb
 			TraceObjectChangeType.VALUE_CREATED.cast(rec);
 		TraceObjectValue affected = cast.getAffectedObject();
 		assert affected.getParent() == object;
-		if (!TargetStackFrame.PC_ATTRIBUTE_NAME.equals(affected.getEntryKey())) {
+		if (!keys.contains(affected.getEntryKey())) {
 			return false;
 		}
 		if (object.getCanonicalParent(affected.getMaxSnap()) == null) {
@@ -155,7 +166,7 @@ public class DBTraceObjectStackFrame implements TraceObjectStackFrame, DBTraceOb
 	}
 
 	protected long snapFor(TraceChangeRecord<?, ?> rec) {
-		if (rec.getEventType() == TraceObjectChangeType.VALUE_CREATED.getType()) {
+		if (rec.getEventType() == TraceObjectChangeType.VALUE_CREATED.getEventType()) {
 			return TraceObjectChangeType.VALUE_CREATED.cast(rec).getAffectedObject().getMinSnap();
 		}
 		return computeMinSnap();
@@ -168,18 +179,18 @@ public class DBTraceObjectStackFrame implements TraceObjectStackFrame, DBTraceOb
 
 	@Override
 	public TraceChangeRecord<?, ?> translateEvent(TraceChangeRecord<?, ?> rec) {
-		int type = rec.getEventType();
-		if (type == TraceObjectChangeType.LIFE_CHANGED.getType()) {
+		EventType type = rec.getEventType();
+		if (type == TraceObjectChangeType.LIFE_CHANGED.getEventType()) {
 			LifeSet newLife = object.getLife();
 			if (!newLife.isEmpty()) {
 				life = newLife;
 			}
 			return createChangeRecord();
 		}
-		else if (type == TraceObjectChangeType.VALUE_CREATED.getType() && changeApplies(rec)) {
+		else if (type == TraceObjectChangeType.VALUE_CREATED.getEventType() && changeApplies(rec)) {
 			return createChangeRecord();
 		}
-		else if (type == TraceObjectChangeType.DELETED.getType()) {
+		else if (type == TraceObjectChangeType.DELETED.getEventType()) {
 			if (life.isEmpty()) {
 				return null;
 			}

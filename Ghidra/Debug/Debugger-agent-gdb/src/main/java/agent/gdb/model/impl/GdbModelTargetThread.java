@@ -108,12 +108,16 @@ public class GdbModelTargetThread
 		return stack;
 	}
 
+	private static Long intToLong(Integer i) {
+		return i == null ? null : i.longValue();
+	}
+
 	private CompletableFuture<Void> updateInfo() {
 		return thread.getInfo().thenAccept(res -> {
 			this.info = res;
 			changeAttributes(List.of(), Map.of( //
 				SHORT_DISPLAY_ATTRIBUTE_NAME, shortDisplay = computeShortDisplay(), //
-				TID_ATTRIBUTE_NAME, info.getTid(), //
+				TID_ATTRIBUTE_NAME, intToLong(info.getTid()), //
 				DISPLAY_ATTRIBUTE_NAME, display = computeDisplay() //
 			), "Initialized");
 		});
@@ -250,7 +254,7 @@ public class GdbModelTargetThread
 
 	public CompletableFuture<Void> stateChanged(GdbStateChangeRecord sco) {
 		GdbState gdbState = sco.getState();
-		CompletableFuture<Void> result = AsyncUtils.NIL;
+		CompletableFuture<Void> result = AsyncUtils.nil();
 		if (gdbState == GdbState.STOPPED) {
 			Msg.debug(this, "Updating stack for " + this);
 			result = CompletableFuture.allOf(updateInfo(), stack.stateChanged(sco));

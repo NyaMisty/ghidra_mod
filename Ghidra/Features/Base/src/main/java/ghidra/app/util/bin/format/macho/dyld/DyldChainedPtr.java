@@ -174,6 +174,8 @@ public class DyldChainedPtr {
 			case DYLD_CHAINED_PTR_ARM64E_KERNEL:
 			case DYLD_CHAINED_PTR_ARM64E_USERLAND:
 			case DYLD_CHAINED_PTR_ARM64E_USERLAND24:
+			case DYLD_CHAINED_PTR_64_KERNEL_CACHE:
+			case DYLD_CHAINED_PTR_X86_64_KERNEL_CACHE:
 				return true;
 			default:
 				return false;
@@ -184,6 +186,7 @@ public class DyldChainedPtr {
 
 		switch (ptrFormat) {
 			case DYLD_CHAINED_PTR_ARM64E:
+			case DYLD_CHAINED_PTR_ARM64E_KERNEL:
 			case DYLD_CHAINED_PTR_ARM64E_USERLAND:
 			case DYLD_CHAINED_PTR_ARM64E_USERLAND24:
 				return ((chainValue >>> 62) & 1) != 0;
@@ -197,7 +200,6 @@ public class DyldChainedPtr {
 
 			// Never bound
 			case DYLD_CHAINED_PTR_ARM64E_FIRMWARE:
-			case DYLD_CHAINED_PTR_ARM64E_KERNEL:
 			case DYLD_CHAINED_PTR_X86_64_KERNEL_CACHE:
 			case DYLD_CHAINED_PTR_64_KERNEL_CACHE:
 			case DYLD_CHAINED_PTR_32_CACHE:
@@ -354,6 +356,7 @@ public class DyldChainedPtr {
 
 		switch (ptrFormat) {
 			case DYLD_CHAINED_PTR_ARM64E:
+			case DYLD_CHAINED_PTR_ARM64E_KERNEL:
 			case DYLD_CHAINED_PTR_ARM64E_USERLAND:
 				ordinal = chainValue & 0xFFFF;
 				break;
@@ -370,7 +373,6 @@ public class DyldChainedPtr {
 
 			// Never Ordinal
 			case DYLD_CHAINED_PTR_ARM64E_FIRMWARE:
-			case DYLD_CHAINED_PTR_ARM64E_KERNEL:
 			case DYLD_CHAINED_PTR_X86_64_KERNEL_CACHE:
 			case DYLD_CHAINED_PTR_64_KERNEL_CACHE:
 			case DYLD_CHAINED_PTR_32_CACHE:

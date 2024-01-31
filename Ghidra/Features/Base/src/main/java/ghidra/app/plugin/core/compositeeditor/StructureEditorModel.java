@@ -161,7 +161,8 @@ class StructureEditorModel extends CompEditorModel {
 		else if (columnIndex == getDataTypeColumn()) {
 			DataType dt = dtc.getDataType();
 			int dtLen = dt.getLength();
-			return DataTypeInstance.getDataTypeInstance(dt, (dtLen > 0) ? dtLen : dtc.getLength());
+			return DataTypeInstance.getDataTypeInstance(dt, (dtLen > 0) ? dtLen : dtc.getLength(),
+				usesAlignedLengthComponents());
 		}
 		else if (columnIndex == getNameColumn()) {
 			value = dtc.getFieldName();
@@ -253,7 +254,7 @@ class StructureEditorModel extends CompEditorModel {
 		if ((rowIndex < 0) || (rowIndex >= getRowCount())) {
 			return false;
 		}
-		// There shouldn't be a selection when this is called.
+
 		switch (columnIndex) {
 			case DATATYPE:
 				return true;
@@ -919,7 +920,7 @@ class StructureEditorModel extends CompEditorModel {
 		try {
 
 			for (int i = 0; i < numCopies; i++) {
-				monitor.checkCanceled();
+				monitor.checkCancelled();
 				monitor.setMessage("Inserting " + (i + 1) + " of " + numCopies);
 				viewComposite.insert(componentOrdinal, dataType, length);
 				monitor.incrementProgress(1);
@@ -1153,8 +1154,7 @@ class StructureEditorModel extends CompEditorModel {
 	}
 
 	private void doCreateInternalStructure(DataTypeManager dtm, CategoryPath categoryPath,
-			String name, TaskMonitor monitor)
-			throws InvalidDataTypeException, UsrException {
+			String name, TaskMonitor monitor) throws InvalidDataTypeException, UsrException {
 
 		int length = 0;
 		StructureDataType structureDataType =
@@ -1249,9 +1249,8 @@ class StructureEditorModel extends CompEditorModel {
 		};
 
 		String title = "Specify the Structure's Name";
-		InputDialog nameStructureDialog =
-			new InputDialog(title, new String[] { "New Structure's Name: " },
-				new String[] { defaultName }, listener);
+		InputDialog nameStructureDialog = new InputDialog(title,
+			new String[] { "New Structure's Name: " }, new String[] { defaultName }, listener);
 
 		provider.getPlugin().getTool().showDialog(nameStructureDialog);
 

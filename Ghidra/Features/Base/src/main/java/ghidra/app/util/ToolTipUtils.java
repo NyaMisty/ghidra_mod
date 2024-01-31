@@ -289,9 +289,17 @@ public class ToolTipUtils {
 		}
 		buffy.append(friendlyEncodeHTML(function.getReturnType().getName()));
 		buffy.append(HTML_SPACE);
-		PrototypeModel callingConvention = function.getCallingConvention();
-		if (isNonDefaultCallingConvention(callingConvention)) {
-			buffy.append(friendlyEncodeHTML(callingConvention.getName()));
+
+		String callingConvention = function.getCallingConventionName();
+		if (callingConvention.equals(Function.DEFAULT_CALLING_CONVENTION_STRING)) {
+			callingConvention = function.getCallingConvention().getName();
+		}
+		if (!Function.UNKNOWN_CALLING_CONVENTION_STRING.equals(callingConvention)) {
+			String ccHtml = friendlyEncodeHTML(callingConvention);
+			if (function.hasUnknownCallingConventionName()) {
+				ccHtml = colorString(Color.RED, ccHtml);
+			}
+			buffy.append(ccHtml);
 			buffy.append(HTML_SPACE);
 		}
 
@@ -302,14 +310,6 @@ public class ToolTipUtils {
 		buildParameterPreview(function, buffy);
 
 		return buffy.toString();
-	}
-
-	private static boolean isNonDefaultCallingConvention(PrototypeModel callingConvention) {
-		if (callingConvention == null) {
-			return false;
-		}
-
-		return !Function.DEFAULT_CALLING_CONVENTION_STRING.equals(callingConvention.getName());
 	}
 
 	private static void buildParameterPreview(Function function, StringBuilder buffy) {

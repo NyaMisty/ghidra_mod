@@ -30,10 +30,10 @@ import javax.swing.table.TableColumnModel;
 import docking.widgets.table.CustomToStringCellRenderer;
 import docking.widgets.table.DefaultEnumeratedColumnTableModel.EnumeratedTableColumn;
 import docking.widgets.table.TableFilter;
-import ghidra.app.plugin.core.debug.DebuggerCoordinates;
 import ghidra.app.plugin.core.debug.gui.DebuggerResources;
 import ghidra.app.plugin.core.debug.utils.DebouncedRowWrappedEnumeratedColumnTableModel;
-import ghidra.framework.model.DomainObject;
+import ghidra.debug.api.tracemgr.DebuggerCoordinates;
+import ghidra.framework.model.DomainObjectEvent;
 import ghidra.framework.plugintool.PluginTool;
 import ghidra.program.model.address.*;
 import ghidra.trace.model.Trace;
@@ -124,9 +124,8 @@ public class DebuggerLegacySectionsPanel extends JPanel {
 		}
 	}
 
-	protected static class SectionTableModel
-			extends DebouncedRowWrappedEnumeratedColumnTableModel< //
-					SectionTableColumns, ObjectKey, SectionRow, TraceSection> {
+	protected static class SectionTableModel extends DebouncedRowWrappedEnumeratedColumnTableModel< //
+			SectionTableColumns, ObjectKey, SectionRow, TraceSection> {
 
 		public SectionTableModel(PluginTool tool) {
 			super(tool, "Sections", SectionTableColumns.class, TraceSection::getObjectKey,
@@ -141,7 +140,7 @@ public class DebuggerLegacySectionsPanel extends JPanel {
 
 	private class SectionsListener extends TraceDomainObjectListener {
 		public SectionsListener() {
-			listenForUntyped(DomainObject.DO_OBJECT_RESTORED, e -> objectRestored());
+			listenForUntyped(DomainObjectEvent.RESTORED, e -> objectRestored());
 
 			/**
 			 * NOTE: No need for Module.ADDED here. A TraceModule is created empty, so when each

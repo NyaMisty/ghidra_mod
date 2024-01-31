@@ -90,10 +90,10 @@ public class AbstractGuiTest extends AbstractGenericTest {
 	 *             for tasks
 	 */
 	public static void waitForTasks() {
-		doWaitForTasks(PRIVATE_LONG_WAIT_TIMEOUT);
+		waitForTasks(PRIVATE_LONG_WAIT_TIMEOUT);
 	}
 
-	private static void doWaitForTasks(long timeout) {
+	public static void waitForTasks(long timeout) {
 		waitForSwing();
 
 		long time = 0;
@@ -109,11 +109,10 @@ public class AbstractGuiTest extends AbstractGenericTest {
 		waitForSwing();
 	}
 
-	// TODO deprecate this; at time of writing there are 1174 references; wait until it is
-	//      a more reasonable number
-	//
-	//      Update: 744 references at 12/1/19
-	//      Update: 559 references at 12/4/20
+	/**
+	 * @deprecated Use {@link #waitForSwing()} instead
+	 */
+	@Deprecated(forRemoval = true, since = "10.3")
 	public static void waitForPostedSwingRunnables() {
 		waitForSwing();
 	}
@@ -1110,8 +1109,8 @@ public class AbstractGuiTest extends AbstractGenericTest {
 		if (expected.getRGB() == actual.getRGB()) {
 			return;
 		}
-		fail("Expected: [" + expected.getClass().getSimpleName() + "]" + expected +
-			", but got: [" + actual.getClass().getSimpleName() + "]" + actual);
+		fail("Expected: [" + expected.getClass().getSimpleName() + "]" + expected + ", but got: [" +
+			actual.getClass().getSimpleName() + "]" + actual);
 	}
 
 	public static void printMemory() {
@@ -1269,7 +1268,7 @@ public class AbstractGuiTest extends AbstractGenericTest {
 	 *             infrastructure method.
 	 */
 	@Deprecated
-	public static void privateWaitForPostedSwingRunnables_SwingSafe() {
+	public static void privatewaitForSwing_SwingSafe() {
 		yieldToSwing();
 	}
 

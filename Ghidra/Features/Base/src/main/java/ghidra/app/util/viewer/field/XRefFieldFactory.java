@@ -28,7 +28,7 @@ import javax.swing.event.ChangeListener;
 import docking.widgets.fieldpanel.field.*;
 import docking.widgets.fieldpanel.support.*;
 import generic.theme.GThemeDefaults.Colors;
-import ghidra.app.util.HighlightProvider;
+import ghidra.app.util.ListingHighlightProvider;
 import ghidra.app.util.XReferenceUtils;
 import ghidra.app.util.viewer.field.ListingColors.XrefColors;
 import ghidra.app.util.viewer.format.FieldFormatModel;
@@ -106,7 +106,7 @@ public class XRefFieldFactory extends FieldFactory {
 	 * @param displayOptions the Options for display properties.
 	 * @param fieldOptions the Options for field specific properties.
 	 */
-	public XRefFieldFactory(FieldFormatModel model, HighlightProvider hlProvider,
+	public XRefFieldFactory(FieldFormatModel model, ListingHighlightProvider hlProvider,
 			Options displayOptions, ToolOptions fieldOptions) {
 		this(FIELD_NAME, model, hlProvider, displayOptions, fieldOptions);
 
@@ -121,7 +121,8 @@ public class XRefFieldFactory extends FieldFactory {
 	 * @param displayOptions the Options for display properties.
 	 * @param fieldOptions the Options for field specific properties.
 	 */
-	protected XRefFieldFactory(String name, FieldFormatModel model, HighlightProvider hlProvider,
+	protected XRefFieldFactory(String name, FieldFormatModel model,
+			ListingHighlightProvider hlProvider,
 			Options displayOptions, ToolOptions fieldOptions) {
 		super(name, model, hlProvider, displayOptions, fieldOptions);
 
@@ -166,15 +167,14 @@ public class XRefFieldFactory extends FieldFactory {
 	private void setupNamespaceOptions(Options fieldOptions) {
 		// we need to install a custom editor that allows us to edit a group of related options
 		fieldOptions.registerOption(NAMESPACE_OPTIONS_KEY, OptionType.CUSTOM_TYPE,
-			new NamespaceWrappedOption(), null, "Adjusts the XREFs Field namespace display",
-			namespaceOptionsEditor);
+			new NamespaceWrappedOption(), new HelpLocation("CodeBrowserPlugin", "XREFs_Field"),
+			"Adjusts the XREFs Field namespace display", namespaceOptionsEditor);
 		CustomOption customOption = fieldOptions.getCustomOption(NAMESPACE_OPTIONS_KEY, null);
-		fieldOptions.getOptions(NAMESPACE_OPTIONS_KEY)
-				.setOptionsHelpLocation(new HelpLocation("CodeBrowserPlugin", "XREFs_Field"));
+
 		if (!(customOption instanceof NamespaceWrappedOption)) {
 			throw new AssertException("Someone set an option for " + NAMESPACE_OPTIONS_KEY +
 				" that is not the expected " +
-				"ghidra.app.util.viewer.field.NamespaceWrappedOption type.");
+				NamespaceWrappedOption.class.getName() + " type.");
 		}
 
 		NamespaceWrappedOption namespaceOption = (NamespaceWrappedOption) customOption;
@@ -322,8 +322,8 @@ public class XRefFieldFactory extends FieldFactory {
 		//
 		Set<Reference> offcutSet = new HashSet<>(offcuts);
 		Predicate<Reference> isOffcut = r -> offcutSet.contains(r);
-		HighlightFactory hlFactory =
-			new FieldHighlightFactory(hlProvider, getClass(), proxy.getObject());
+		ListingFieldHighlightFactoryAdapter hlFactory =
+			new ListingFieldHighlightFactoryAdapter(hlProvider);
 		Function currentFunction = functionManager.getFunctionContaining(cu.getMinAddress());
 		List<TextField> functionRows = createXrefRowsByFunction(program, currentFunction,
 			xrefsByFunction, isOffcut, varWidth, hlFactory);
@@ -372,12 +372,14 @@ public class XRefFieldFactory extends FieldFactory {
 
 		CompositeVerticalLayoutTextField compositefield =
 			new CompositeVerticalLayoutTextField(allFields, newStartX, width, maxXRefs, hlFactory);
-		return new XrefListingField(this, proxy, compositefield);
+		XrefListingField listingField =
+			new XrefListingField(this, proxy, compositefield, hlFactory);
+		return listingField;
 	}
 
 	private List<TextField> createXrefRowsByFunction(Program program, Function currentFunction,
 			TreeMap<Function, List<Reference>> xrefsByFunction, Predicate<Reference> isOffcut,
-			int varWidth, HighlightFactory hlFactory) {
+			int varWidth, FieldHighlightFactory hlFactory) {
 
 		FontMetrics metrics = getMetrics();
 		AttributedString delimiter = new AttributedString(delim, Colors.FOREGROUND, metrics);
@@ -436,7 +438,7 @@ public class XRefFieldFactory extends FieldFactory {
 
 	private TextField createWrappingXrefRow(Program program, int startRow, List<Reference> xrefs,
 			Function currentFunction, Predicate<Reference> isOffcut, int availableLines,
-			HighlightFactory hlFactory) {
+			FieldHighlightFactory hlFactory) {
 
 		FontMetrics metrics = getMetrics();
 		AttributedString delimiter = new AttributedString(delim, Colors.FOREGROUND, metrics);
@@ -531,10 +533,11 @@ public class XRefFieldFactory extends FieldFactory {
 
 		// assumption: the given array has been limited to the maxXref size already
 		int n = list.size();
-		HighlightFactory hlFactory =
-			new FieldHighlightFactory(hlProvider, getClass(), proxy.getObject());
+		ListingFieldHighlightFactoryAdapter hlFactory =
+			new ListingFieldHighlightFactoryAdapter(hlProvider);
 		TextField field = new FlowLayoutTextField(list, startX + varWidth, width, n, hlFactory);
-		return new XrefListingField(this, proxy, field);
+		XrefListingField listingField = new XrefListingField(this, proxy, field, hlFactory);
+		return listingField;
 	}
 
 	private List<FieldElement> toFieldElements(List<XrefFieldElement> list, boolean showEllipses) {
@@ -816,7 +819,8 @@ public class XRefFieldFactory extends FieldFactory {
 	}
 
 	@Override
-	public FieldFactory newInstance(FieldFormatModel formatModel, HighlightProvider provider,
+	public FieldFactory newInstance(FieldFormatModel formatModel,
+			ListingHighlightProvider provider,
 			ToolOptions toolOptions, ToolOptions fieldOptions) {
 		return new XRefFieldFactory(formatModel, provider, toolOptions, fieldOptions);
 	}
@@ -887,8 +891,9 @@ public class XRefFieldFactory extends FieldFactory {
 
 	private class XrefListingField extends ListingTextField {
 
-		XrefListingField(XRefFieldFactory factory, ProxyObj<?> proxy, TextField field) {
-			super(factory, proxy, field);
+		XrefListingField(XRefFieldFactory factory, ProxyObj<?> proxy, TextField field,
+				ListingFieldHighlightFactoryAdapter hlFactory) {
+			super(factory, proxy, field, hlFactory);
 		}
 
 	}

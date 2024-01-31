@@ -43,7 +43,7 @@ public class InsertUndefinedAction extends CompositeEditorTableAction {
 		KeyStroke.getKeyStroke(KeyEvent.VK_U, InputEvent.ALT_DOWN_MASK);
 
 	public InsertUndefinedAction(CompositeEditorProvider provider) {
-		super(provider, EDIT_ACTION_PREFIX + ACTION_NAME, GROUP_NAME, POPUP_PATH, null, ICON);
+		super(provider, ACTION_NAME, GROUP_NAME, POPUP_PATH, null, ICON);
 		setDescription(DESCRIPTION);
 		setKeyBindingData(new KeyBindingData(KEY_STROKE));
 		adjustEnablement();
@@ -59,7 +59,8 @@ public class InsertUndefinedAction extends CompositeEditorTableAction {
 					DataType undefinedDt =
 						model.viewComposite.isPackingEnabled() ? Undefined1DataType.dataType
 								: DataType.DEFAULT;
-					DataTypeInstance dti = DataTypeInstance.getDataTypeInstance(undefinedDt, -1);
+					DataTypeInstance dti =
+						DataTypeInstance.getDataTypeInstance(undefinedDt, -1, false);
 					model.insert(index, dti.getDataType(), dti.getLength());
 				}
 			}

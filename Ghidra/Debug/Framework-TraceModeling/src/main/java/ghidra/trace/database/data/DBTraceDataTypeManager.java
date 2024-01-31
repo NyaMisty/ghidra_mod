@@ -16,15 +16,18 @@
 package ghidra.trace.database.data;
 
 import java.io.IOException;
-import java.util.LinkedList;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.locks.ReadWriteLock;
 
-import db.Transaction;
 import db.DBHandle;
+import db.Transaction;
 import ghidra.framework.model.DomainFile;
 import ghidra.program.database.data.ProgramBasedDataTypeManagerDB;
 import ghidra.program.model.address.Address;
+import ghidra.program.model.address.AddressFactory;
 import ghidra.program.model.data.*;
+import ghidra.program.model.lang.*;
 import ghidra.trace.database.DBTrace;
 import ghidra.trace.database.DBTraceManager;
 import ghidra.trace.model.data.TraceBasedDataTypeManager;
@@ -38,15 +41,40 @@ import ghidra.util.task.TaskMonitor;
 public class DBTraceDataTypeManager extends ProgramBasedDataTypeManagerDB
 		implements TraceBasedDataTypeManager, DBTraceManager {
 
-	protected final ReadWriteLock lock;
+	protected final ReadWriteLock lock; // TODO: This lock object is not used
 	protected final DBTrace trace;
+
+	private static final String INSTANCE_TABLE_PREFIX = null; // placeholder only
 
 	public DBTraceDataTypeManager(DBHandle dbh, DBOpenMode openMode, ReadWriteLock lock,
 			TaskMonitor monitor, DBTrace trace)
 			throws CancelledException, VersionException, IOException {
-		super(dbh, null, openMode.toInteger(), trace, trace.getLock(), monitor);
+		super(dbh, null, openMode.toInteger(), INSTANCE_TABLE_PREFIX, trace, trace.getLock(),
+			monitor);
 		this.lock = lock; // TODO: nothing uses this local lock - not sure what its purpose is
 		this.trace = trace;
+
+		setProgramArchitecture(new ProgramArchitecture() {
+
+			@Override
+			public Language getLanguage() {
+				return trace.getBaseLanguage();
+			}
+
+			@Override
+			public CompilerSpec getCompilerSpec() {
+				return trace.getBaseCompilerSpec();
+			}
+
+			@Override
+			public AddressFactory getAddressFactory() {
+				return trace.getBaseAddressFactory();
+			}
+		}, null, false, monitor);
+
+		if (openMode == DBOpenMode.CREATE) {
+			saveDataOrganization();
+		}
 	}
 
 	@Override
@@ -157,18 +185,15 @@ public class DBTraceDataTypeManager extends ProgramBasedDataTypeManagerDB
 	}
 
 	@Override
-	protected void replaceDataTypeIDs(long oldID, long newID) {
-		if (oldID == newID) {
-			return;
-		}
-		trace.getCodeManager().replaceDataTypes(oldID, newID);
-		trace.getSymbolManager().replaceDataTypes(oldID, newID);
+	protected void replaceDataTypesUsed(Map<Long, Long> dataTypeReplacementMap) {
+		trace.getCodeManager().replaceDataTypes(dataTypeReplacementMap);
+		trace.getSymbolManager().replaceDataTypes(dataTypeReplacementMap);
 	}
 
 	@Override
-	protected void deleteDataTypeIDs(LinkedList<Long> deletedIds, TaskMonitor monitor)
-			throws CancelledException {
-		trace.getCodeManager().clearData(deletedIds, monitor);
+	protected void deleteDataTypesUsed(Set<Long> deletedIds) {
+		// TODO: Should use replacement type instead of clearing
+		trace.getCodeManager().clearData(deletedIds, TaskMonitor.DUMMY);
 		trace.getSymbolManager().invalidateCache(false);
 	}
 
@@ -232,13 +257,5 @@ public class DBTraceDataTypeManager extends ProgramBasedDataTypeManagerDB
 		 * would have unexpected fall out.
 		 */
 		return ArchiveType.PROGRAM;
-	}
-
-	@Override
-	public DataOrganization getDataOrganization() {
-		if (dataOrganization == null) {
-			dataOrganization = trace.getBaseCompilerSpec().getDataOrganization();
-		}
-		return dataOrganization;
 	}
 }

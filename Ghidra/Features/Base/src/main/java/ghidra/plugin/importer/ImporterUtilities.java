@@ -230,6 +230,13 @@ public class ImporterUtilities {
 
 		Objects.requireNonNull(monitor);
 
+		// Don't allow Add To Program while "things are happening" to the program
+		if (!program.canLock()) {
+			Msg.showWarn(null, null, "Add To Program",
+				"Cannot Add To Program while program is locked.  Please wait or stop running tasks.");
+			return;
+		}
+
 		try {
 			ByteProvider provider = fsService.getByteProvider(fsrl, false, monitor);
 			if (provider.length() == 0) {
@@ -240,7 +247,7 @@ public class ImporterUtilities {
 			}
 
 			LoaderMap loaderMap = LoaderService.getSupportedLoadSpecs(provider,
-				loader -> loader.supportsLoadIntoProgram());
+				loader -> loader.supportsLoadIntoProgram(program));
 
 			SystemUtilities.runSwingLater(() -> {
 				AddToProgramDialog dialog =
@@ -279,8 +286,8 @@ public class ImporterUtilities {
 			LoaderMap loaderMap = LoaderService.getAllSupportedLoadSpecs(provider);
 
 			SystemUtilities.runSwingLater(() -> {
-				ImporterDialog importerDialog =
-					new ImporterDialog(tool, programManager, loaderMap, provider, suggestedPath);
+				ImporterDialog importerDialog = new ImporterDialog(tool, programManager, loaderMap,
+					provider, suggestedPath);
 				if (destinationFolder != null) {
 					importerDialog.setDestinationFolder(destinationFolder);
 				}
@@ -410,7 +417,7 @@ public class ImporterUtilities {
 		boolean firstProgram = true;
 		Set<DomainFile> importedFilesSet = new HashSet<>();
 		for (Loaded<? extends DomainObject> loaded : loadResults) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 
 			if (loaded.getDomainObject() instanceof Program program) {
 				ProgramMappingService.createAssociation(fsrl, program);

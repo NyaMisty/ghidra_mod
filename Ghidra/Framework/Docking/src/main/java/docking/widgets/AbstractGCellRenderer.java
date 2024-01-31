@@ -21,11 +21,14 @@ import javax.swing.BorderFactory;
 import javax.swing.JComponent;
 import javax.swing.border.Border;
 import javax.swing.plaf.UIResource;
+import javax.swing.plaf.basic.BasicHTML;
+import javax.swing.table.DefaultTableCellRenderer;
 
 import docking.widgets.label.GDHtmlLabel;
 import generic.theme.GColor;
 import generic.theme.GColorUIResource;
 import generic.theme.GThemeDefaults.Colors.Palette;
+import generic.theme.GThemeDefaults.Colors.Tables;
 
 /**
  * A common base class for list and table renderer objects, unifying the Ghidra look and feel.
@@ -165,17 +168,21 @@ public abstract class AbstractGCellRenderer extends GDHtmlLabel {
 		return ALT_BACKGROUND_COLOR;
 	}
 
-// ==================================================================================================
+	protected Color getErrorForegroundColor(boolean isSelected) {
+		return isSelected ? Tables.ERROR_SELECTED : Tables.ERROR_UNSELECTED;
+	}
+
+	protected Color getUneditableForegroundColor(boolean isSelected) {
+		return isSelected ? Tables.UNEDITABLE_SELECTED : Tables.UNEDITABLE_UNSELECTED;
+	}
+
+//==================================================================================================
 // Methods overridden for performance reasons (see DefaultTableCellRenderer &
 //    DefaultListCellRenderer)
 //==================================================================================================
 
 	/**
-	 * Overridden for performance reasons.
-	 * See the <a href="#override">Implementation Note</a>
-	 * for more information.
-	 *
-	 * @since 1.5
+	 * See {@link DefaultTableCellRenderer} class header javadoc for more info.
 	 */
 	@Override
 	public void invalidate() {
@@ -187,9 +194,7 @@ public abstract class AbstractGCellRenderer extends GDHtmlLabel {
 	}
 
 	/**
-	 * Overridden for performance reasons.
-	 * See the <a href="#override">Implementation Note</a>
-	 * for more information.
+	 * See {@link DefaultTableCellRenderer} class header javadoc for more info.
 	 */
 	@Override
 	public void validate() {
@@ -197,9 +202,7 @@ public abstract class AbstractGCellRenderer extends GDHtmlLabel {
 	}
 
 	/**
-	 * Overridden for performance reasons.
-	 * See the <a href="#override">Implementation Note</a>
-	 * for more information.
+	 * See {@link DefaultTableCellRenderer} class header javadoc for more info.
 	 */
 	@Override
 	public void revalidate() {
@@ -207,9 +210,7 @@ public abstract class AbstractGCellRenderer extends GDHtmlLabel {
 	}
 
 	/**
-	 * Overridden for performance reasons.
-	 * See the <a href="#override">Implementation Note</a>
-	 * for more information.
+	 * See {@link DefaultTableCellRenderer} class header javadoc for more info.
 	 */
 	@Override
 	public void repaint(long tm, int x, int y, int width, int height) {
@@ -217,9 +218,7 @@ public abstract class AbstractGCellRenderer extends GDHtmlLabel {
 	}
 
 	/**
-	 * Overridden for performance reasons.
-	 * See the <a href="#override">Implementation Note</a>
-	 * for more information.
+	 * See {@link DefaultTableCellRenderer} class header javadoc for more info.
 	 */
 	@Override
 	public void repaint(Rectangle r) {
@@ -227,11 +226,7 @@ public abstract class AbstractGCellRenderer extends GDHtmlLabel {
 	}
 
 	/**
-	 * Overridden for performance reasons.
-	 * See the <a href="#override">Implementation Note</a>
-	 * for more information.
-	 *
-	 * @since 1.5
+	 * See {@link DefaultTableCellRenderer} class header javadoc for more info.
 	 */
 	@Override
 	public void repaint() {
@@ -239,26 +234,23 @@ public abstract class AbstractGCellRenderer extends GDHtmlLabel {
 	}
 
 	/**
-	 * Overridden for performance reasons.
-	 * See the <a href="#override">Implementation Note</a>
-	 * for more information.
+	 * See {@link DefaultTableCellRenderer} class header javadoc for more info.
 	 */
 	@Override
-	protected void firePropertyChange(String propertyName, Object oldValue, Object newValue) {
-		if (propertyName.equals("text") || propertyName.equals("labelFor") ||
-			propertyName.equals("displayedMnemonic") ||
-			((propertyName.equals("font") || propertyName.equals("foreground")) &&
-				oldValue != newValue &&
-				getClientProperty(javax.swing.plaf.basic.BasicHTML.propertyKey) != null)) {
-
-			super.firePropertyChange(propertyName, oldValue, newValue);
+	protected void firePropertyChange(String property, Object oldValue, Object newValue) {
+		if (property.equals("text") || property.equals("labelFor") ||
+			property.equals("displayedMnemonic") || property.equals("html")) {
+			super.firePropertyChange(property, oldValue, newValue);
+		}
+		else if (getClientProperty(BasicHTML.propertyKey) != null) {
+			if (property.equals("font") || property.equals("foreground")) {
+				super.firePropertyChange(property, oldValue, newValue);
+			}
 		}
 	}
 
 	/**
-	 * Overridden for performance reasons.
-	 * See the <a href="#override">Implementation Note</a>
-	 * for more information.
+	 * See {@link DefaultTableCellRenderer} class header javadoc for more info.
 	 */
 	@Override
 	public void firePropertyChange(String propertyName, boolean oldValue, boolean newValue) {

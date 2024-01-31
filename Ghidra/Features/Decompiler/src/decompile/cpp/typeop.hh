@@ -41,7 +41,10 @@ public:
   enum {
     inherits_sign = 1,		///< Operator token inherits signedness from its inputs
     inherits_sign_zero = 2,	///< Only inherits sign from first operand, not the second
-    shift_op = 4		///< Shift operation
+    shift_op = 4,		///< Shift operation
+    arithmetic_op = 8,		///< Operation involving addition, multiplication, or division
+    logical_op = 0x10,		///< Logical operation
+    floatingpoint_op = 0x20	///< Floating-point operation
   };
 protected:
   TypeFactory *tlst;		///< Pointer to data-type factory
@@ -50,8 +53,16 @@ protected:
   uint4 addlflags;		///< Additional properties
   string name;			///< Symbol denoting this operation
   OpBehavior *behave;		///< Object for emulating the behavior of the op-code
-  virtual void setMetatypeIn(type_metatype val) {}	///< Set the data-type associated with inputs to this opcode
-  virtual void setMetatypeOut(type_metatype val) {}	///< Set the data-type associated with outputs of this opcode
+
+  /// \brief Set the data-type (as a meta-type) associated with inputs to this opcode
+  ///
+  /// \param val is the data-type of inputs
+  virtual void setMetatypeIn(type_metatype val) {}
+
+  /// \brief Set the data-type (as a meta-type) associated with outputs of this opcode
+  ///
+  /// \param val is the data-type of outputs
+  virtual void setMetatypeOut(type_metatype val) {}
   virtual void setSymbol(const string &nm) { name = nm; }	///< Set the display symbol associated with the op-code
 public:
   TypeOp(TypeFactory *t,OpCode opc,const string &n);	///< Constructor
@@ -113,6 +124,15 @@ public:
 
   /// \brief Return \b true if the op-code is a shift (INT_LEFT, INT_RIGHT, or INT_SRIGHT)
   bool isShiftOp(void) const { return ((addlflags & shift_op)!=0); }
+
+  /// \brief Return \b true if the opcode is INT_ADD, INT_MULT, INT_DIV, INT_REM, or other arithmetic op
+  bool isArithmeticOp(void) const { return ((addlflags & arithmetic_op)!=0); }
+
+  /// \brief Return \b true if the opcode is INT_AND, INT_OR, INT_XOR, or other logical op
+  bool isLogicalOp(void) const { return ((addlflags & logical_op)!=0); }
+
+  /// \brief Return \b true if the opcode is FLOAT_ADD, FLOAT_MULT, or other floating-point operation
+  bool isFloatingPointOp(void) const { return ((addlflags & floatingpoint_op)!=0); }
 
   /// \brief Find the minimal (or suggested) data-type of an output to \b this op-code
   virtual Datatype *getOutputLocal(const PcodeOp *op) const;
@@ -733,16 +753,23 @@ public:
 
 /// \brief Information about the PIECE op-code
 class TypeOpPiece : public TypeOpFunc {
+  int4 nearPointerSize;		///< Size of near (truncated) pointer (if not 0)
+  int4 farPointerSize;		///< Size of far (extended) pointer (if not 0)
 public:
   TypeOpPiece(TypeFactory *t);			///< Constructor
   virtual Datatype *getInputCast(const PcodeOp *op,int4 slot,const CastStrategy *castStrategy) const;
   virtual Datatype *getOutputToken(const PcodeOp *op,CastStrategy *castStrategy) const;
+  virtual Datatype *propagateType(Datatype *alttype,PcodeOp *op,Varnode *invn,Varnode *outvn,
+				  int4 inslot,int4 outslot);
   virtual string getOperatorName(const PcodeOp *op) const;
   virtual void push(PrintLanguage *lng,const PcodeOp *op,const PcodeOp *readOp) const { lng->opPiece(op); }
+  static int4 computeByteOffsetForComposite(const PcodeOp *op,int4 slot);
 };
 
 /// \brief Information about the SUBPIECE op-code
 class TypeOpSubpiece : public TypeOpFunc {
+  int4 nearPointerSize;		///< Size of near (truncated) pointer (if not 0)
+  int4 farPointerSize;		///< Size of far (extended) pointer (if not 0)
 public:
   TypeOpSubpiece(TypeFactory *t);			///< Constructor
   virtual Datatype *getInputCast(const PcodeOp *op,int4 slot,const CastStrategy *castStrategy) const;

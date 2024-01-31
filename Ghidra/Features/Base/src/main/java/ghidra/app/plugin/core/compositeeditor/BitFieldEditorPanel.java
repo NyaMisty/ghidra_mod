@@ -21,17 +21,18 @@ import java.awt.event.*;
 import javax.swing.*;
 import javax.swing.event.CellEditorListener;
 import javax.swing.event.ChangeEvent;
-import javax.swing.plaf.UIResource;
 
 import com.google.common.base.Predicate;
 
 import docking.ActionContext;
+import docking.DefaultActionContext;
 import docking.widgets.DropDownSelectionTextField;
 import docking.widgets.OptionDialog;
 import docking.widgets.button.GButton;
 import docking.widgets.label.GDLabel;
 import generic.theme.GIcon;
 import generic.theme.GThemeDefaults.Colors.Messages;
+import generic.theme.GThemeDefaults.Colors.Viewport;
 import ghidra.app.plugin.core.compositeeditor.BitFieldPlacementComponent.BitAttributes;
 import ghidra.app.plugin.core.compositeeditor.BitFieldPlacementComponent.BitFieldAllocation;
 import ghidra.app.services.DataTypeManagerService;
@@ -466,12 +467,7 @@ public class BitFieldEditorPanel extends JPanel {
 			new JScrollPane(placementComponent, ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER,
 				ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 
-		Color bg = getBackground();
-		if (bg instanceof UIResource) {
-			// Nimbus does not honor the color if it is a UIResource
-			bg = new Color(bg.getRGB());
-		}
-		scrollPane.getViewport().setBackground(bg);
+		scrollPane.getViewport().setBackground(Viewport.UNEDITABLE_BACKGROUND);
 		scrollPane.setBorder(null);
 
 		bitViewPanel.add(scrollPane);
@@ -757,7 +753,7 @@ public class BitFieldEditorPanel extends JPanel {
 		return null;
 	}
 
-	class BitFieldEditorContext extends ActionContext {
+	class BitFieldEditorContext extends DefaultActionContext {
 
 		private int selectedBitOffset;
 		private DataTypeComponent selectedDtc;

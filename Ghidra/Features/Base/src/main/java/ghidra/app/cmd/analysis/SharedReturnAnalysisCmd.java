@@ -68,7 +68,7 @@ public class SharedReturnAnalysisCmd extends BackgroundCommand {
 			SymbolTable symbolTable = program.getSymbolTable();
 			SymbolIterator fnSymbols = symbolTable.getSymbols(set, SymbolType.FUNCTION, true);
 			while (fnSymbols.hasNext()) {
-				monitor.checkCanceled();
+				monitor.checkCancelled();
 				Symbol s = fnSymbols.next();
 				Address entry = s.getAddress();
 
@@ -82,7 +82,7 @@ public class SharedReturnAnalysisCmd extends BackgroundCommand {
 
 				fnSymbols = symbolTable.getSymbols(set, SymbolType.FUNCTION, true);
 				while (fnSymbols.hasNext()) {
-					monitor.checkCanceled();
+					monitor.checkCancelled();
 					Symbol s = fnSymbols.next();
 					checkAboveFunction(s, jumpScanSet);
 					checkBelowFunction(s, jumpScanSet);
@@ -96,7 +96,7 @@ public class SharedReturnAnalysisCmd extends BackgroundCommand {
 				ReferenceManager refMgr = program.getReferenceManager();
 				AddressIterator refSrcIter = refMgr.getReferenceSourceIterator(jumpScanSet, true);
 				while (refSrcIter.hasNext()) {
-					monitor.checkCanceled();
+					monitor.checkCancelled();
 					Address srcAddr = refSrcIter.next();
 					RefType flow = null;
 					Address destAddr = null;
@@ -265,8 +265,9 @@ public class SharedReturnAnalysisCmd extends BackgroundCommand {
 			processFunctionJumpReferences(program, entry, monitor);
 		}
 		else {
-			// check if there is any fallthru flow to the potential entry point
-			if (hasFallThruTo(program, entry)) {
+			// check if there could be any fallthru flow to the potential entry point
+			if (checkIfCouldHaveFallThruTo(program, entry)) {
+				// if there could be, even later in analysis, don't create the function
 				return;
 			}
 			AutoAnalysisManager analysisMgr = AutoAnalysisManager.getAnalysisManager(program);
@@ -274,7 +275,7 @@ public class SharedReturnAnalysisCmd extends BackgroundCommand {
 		}
 	}
 
-	private boolean hasFallThruTo(Program program, Address location) {
+	private boolean checkIfCouldHaveFallThruTo(Program program, Address location) {
 		Instruction instr= program.getListing().getInstructionAt(location);
 		if (instr == null) {
 			return true;
@@ -283,8 +284,15 @@ public class SharedReturnAnalysisCmd extends BackgroundCommand {
 		if (fallFrom != null) {
 			Instruction fallInstr = program.getListing().getInstructionContaining(fallFrom);
 			if (fallInstr != null && location.equals(fallInstr.getFallThrough())) {
+				// if there is no instruction yet, function may not be created yet
 				return true;
 			}
+		}
+
+		if (instr.getFlowType() == RefType.TERMINATOR) {
+			// a single instruction that is terminal consider
+			// as having a possible future fallthru to
+			return true;
 		}
 		return false;
 	}
@@ -341,7 +349,7 @@ public class SharedReturnAnalysisCmd extends BackgroundCommand {
 
 		InstructionIterator instructionIter = program.getListing().getInstructions(set, true);
 		while (instructionIter.hasNext()) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			Instruction instr = instructionIter.next();
 			FlowType ft = instr.getFlowType();
 			if (!ft.isJump()) {
@@ -371,11 +379,6 @@ public class SharedReturnAnalysisCmd extends BackgroundCommand {
 	private void processFunctionJumpReferences(Program program, Address entry, TaskMonitor monitor)
 			throws CancelledException {
 		
-		// check if there is any fallthru flow to the entry point
-		if (hasFallThruTo(program, entry)) {
-			return;
-		}
-		
 		// since reference fixup will occur when flow override is done,
 		// avoid concurrent modification during reference iterator use
 		// by building list of jump references
@@ -387,7 +390,7 @@ public class SharedReturnAnalysisCmd extends BackgroundCommand {
 		FunctionManager funcMgr = program.getFunctionManager();
 		
 		for (Reference ref : fnRefList) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			Instruction instr = program.getListing().getInstructionAt(ref.getFromAddress());
 			if (instr == null) {
 				continue;
@@ -429,7 +432,7 @@ public class SharedReturnAnalysisCmd extends BackgroundCommand {
 		List<Reference> fnRefList = null;
 		ReferenceIterator referencesTo = program.getReferenceManager().getReferencesTo(entry);
 		while (referencesTo.hasNext()) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			Reference ref = referencesTo.next();
 			if (!ref.getReferenceType().isJump()) {
 				continue;

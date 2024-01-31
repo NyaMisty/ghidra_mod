@@ -141,14 +141,14 @@ public class DBTrace extends DBCachedDomainObjectAdapter implements Trace, Trace
 
 	protected Set<DBTraceTimeViewport> viewports = new WeakHashCowSet<>();
 	protected ListenerSet<DBTraceDirectChangeListener> directListeners =
-		new ListenerSet<>(DBTraceDirectChangeListener.class);
+		new ListenerSet<>(DBTraceDirectChangeListener.class, true);
 	protected DBTraceVariableSnapProgramView programView;
 	protected Set<DBTraceVariableSnapProgramView> programViews = new WeakHashCowSet<>();
 	protected Set<TraceProgramView> programViewsView = Collections.unmodifiableSet(programViews);
 	protected Map<Long, DBTraceProgramView> fixedProgramViews = new WeakValueHashCowMap<>();
 	// NOTE: Can't pre-construct unmodifiableMap(fixedProgramViews), because values()' id changes
 	protected ListenerSet<TraceProgramViewListener> viewListeners =
-		new ListenerSet<>(TraceProgramViewListener.class);
+		new ListenerSet<>(TraceProgramViewListener.class, true);
 
 	public DBTrace(String name, CompilerSpec baseCompilerSpec, Object consumer)
 			throws IOException, LanguageNotFoundException {
@@ -161,8 +161,8 @@ public class DBTrace extends DBCachedDomainObjectAdapter implements Trace, Trace
 		// TODO: Should there be a TraceCompilerSpec?
 		this.baseCompilerSpec =
 			baseLanguage.getCompilerSpecByID(baseCompilerSpec.getCompilerSpecID());
-		this.baseAddressFactory =
-			new TraceAddressFactory(this.baseLanguage, this.baseCompilerSpec);
+		this.baseAddressFactory = new TraceAddressFactory(this.baseLanguage, this.baseCompilerSpec,
+			space -> getAddressSet(space));
 
 		try (Transaction tx = this.openTransaction("Create")) {
 			initOptions(DBOpenMode.CREATE);
@@ -175,10 +175,16 @@ public class DBTrace extends DBCachedDomainObjectAdapter implements Trace, Trace
 			e.unwrap(LanguageNotFoundException.class);
 			throw new AssertionError(e);
 		}
+		clearUndo(false);
 		changeSet = traceChangeSet = new DBTraceChangeSet();
 		recordChanges = true;
 
 		programView = createProgramView(0);
+	}
+
+	private AddressSetView getAddressSet(OverlayAddressSpace space) {
+		// use entire space
+		return new AddressSet(space.getMinAddress(), space.getMaxAddress());
 	}
 
 	public DBTrace(DBHandle dbh, DBOpenMode openMode, TaskMonitor monitor, Object consumer)
@@ -186,7 +192,7 @@ public class DBTrace extends DBCachedDomainObjectAdapter implements Trace, Trace
 		super(dbh, openMode, monitor, "Untitled", DB_TIME_INTERVAL, DB_BUFFER_SIZE, consumer);
 		this.storeFactory = new DBCachedObjectStoreFactory(this);
 
-		try {
+		try (Transaction tx = this.openTransaction("Create")) {
 			initOptions(openMode);
 			init();
 		}
@@ -194,6 +200,7 @@ public class DBTrace extends DBCachedDomainObjectAdapter implements Trace, Trace
 			e.unwrap(LanguageNotFoundException.class);
 			throw new AssertionError(e);
 		}
+		clearUndo(false);
 		changeSet = traceChangeSet = new DBTraceChangeSet();
 		recordChanges = true;
 
@@ -212,11 +219,11 @@ public class DBTrace extends DBCachedDomainObjectAdapter implements Trace, Trace
 		else {
 			name = traceInfo.getString(NAME, "Unnamed?");
 			baseLanguage = DefaultLanguageService.getLanguageService()
-					.getLanguage(
-						new LanguageID(traceInfo.getString(BASE_LANGUAGE, null)));
+					.getLanguage(new LanguageID(traceInfo.getString(BASE_LANGUAGE, null)));
 			baseCompilerSpec = baseLanguage.getCompilerSpecByID(
 				new CompilerSpecID(traceInfo.getString(BASE_COMPILER, null)));
-			baseAddressFactory = new TraceAddressFactory(baseLanguage, baseCompilerSpec);
+			baseAddressFactory = new TraceAddressFactory(baseLanguage, baseCompilerSpec,
+				space -> getAddressSet(space));
 		}
 	}
 
@@ -245,9 +252,8 @@ public class DBTrace extends DBCachedDomainObjectAdapter implements Trace, Trace
 			return;
 		}
 		if (baseAddressFactory.getAddressSpace(as.getSpaceID()) != as) {
-			throw new IllegalArgumentException(
-				"AddressSpace '" + as + "' is not in this trace (language=" + getBaseLanguage() +
-					")");
+			throw new IllegalArgumentException("AddressSpace '" + as +
+				"' is not in this trace (language=" + getBaseLanguage() + ")");
 		}
 	}
 
@@ -327,9 +333,8 @@ public class DBTrace extends DBCachedDomainObjectAdapter implements Trace, Trace
 	@DependentService
 	protected DBTraceDataTypeManager createDataTypeManager()
 			throws CancelledException, IOException {
-		return createTraceManager("Data Type Manager",
-			(openMode, monitor) -> new DBTraceDataTypeManager(dbh, openMode, rwLock, monitor,
-				this));
+		return createTraceManager("Data Type Manager", (openMode,
+				monitor) -> new DBTraceDataTypeManager(dbh, openMode, rwLock, monitor, this));
 	}
 
 	@DependentService
@@ -364,8 +369,7 @@ public class DBTrace extends DBCachedDomainObjectAdapter implements Trace, Trace
 	}
 
 	@DependentService
-	protected DBTraceObjectManager createObjectManager()
-			throws CancelledException, IOException {
+	protected DBTraceObjectManager createObjectManager() throws CancelledException, IOException {
 		return createTraceManager("Object Manager",
 			(openMode, monitor) -> new DBTraceObjectManager(dbh, openMode, rwLock, monitor,
 				baseLanguage, this));
@@ -374,9 +378,8 @@ public class DBTrace extends DBCachedDomainObjectAdapter implements Trace, Trace
 	@DependentService
 	protected DBTraceOverlaySpaceAdapter createOverlaySpaceAdapter()
 			throws CancelledException, IOException {
-		return createTraceManager("Overlay Space Adapter",
-			(openMode, monitor) -> new DBTraceOverlaySpaceAdapter(dbh, openMode, rwLock, monitor,
-				this));
+		return createTraceManager("Overlay Space Adapter", (openMode,
+				monitor) -> new DBTraceOverlaySpaceAdapter(dbh, openMode, rwLock, monitor, this));
 	}
 
 	@DependentService
@@ -407,9 +410,9 @@ public class DBTrace extends DBCachedDomainObjectAdapter implements Trace, Trace
 	@DependentService
 	protected DBTraceStaticMappingManager createStaticMappingManager(
 			DBTraceOverlaySpaceAdapter overlayAdapter) throws CancelledException, IOException {
-		return createTraceManager("Static Mapping Manager", (openMode,
-				monitor) -> new DBTraceStaticMappingManager(dbh, openMode, rwLock, monitor, this,
-					overlayAdapter));
+		return createTraceManager("Static Mapping Manager",
+			(openMode, monitor) -> new DBTraceStaticMappingManager(dbh, openMode, rwLock, monitor,
+				this, overlayAdapter));
 	}
 
 	@DependentService
@@ -432,9 +435,8 @@ public class DBTrace extends DBCachedDomainObjectAdapter implements Trace, Trace
 	@DependentService
 	protected DBTraceTimeManager createTimeManager(DBTraceThreadManager threadManager)
 			throws IOException, CancelledException {
-		return createTraceManager("Time Manager",
-			(openMode, monitor) -> new DBTraceTimeManager(dbh, openMode, rwLock, monitor, this,
-				threadManager));
+		return createTraceManager("Time Manager", (openMode, monitor) -> new DBTraceTimeManager(dbh,
+			openMode, rwLock, monitor, this, threadManager));
 	}
 
 	@Override
@@ -589,7 +591,7 @@ public class DBTrace extends DBCachedDomainObjectAdapter implements Trace, Trace
 		super.fireEvent(ev);
 		if (directListeners != null) {
 			// Some events fire during construction
-			directListeners.fire.changed(ev);
+			directListeners.invoke().changed(ev);
 		}
 	}
 
@@ -611,7 +613,7 @@ public class DBTrace extends DBCachedDomainObjectAdapter implements Trace, Trace
 				return new DBTraceProgramView(this, snap, baseCompilerSpec);
 			});
 		}
-		viewListeners.fire.viewCreated(view);
+		viewListeners.invoke().viewCreated(view);
 		return view;
 	}
 
@@ -623,7 +625,7 @@ public class DBTrace extends DBCachedDomainObjectAdapter implements Trace, Trace
 			view = new DBTraceVariableSnapProgramView(this, snap, baseCompilerSpec);
 			programViews.add(view);
 		}
-		viewListeners.fire.viewCreated(view);
+		viewListeners.invoke().viewCreated(view);
 		return view;
 	}
 
@@ -828,13 +830,13 @@ public class DBTrace extends DBCachedDomainObjectAdapter implements Trace, Trace
 		allViews(v -> v.updateMemoryChangeRegionBlockFlags(region, lifespan));
 	}
 
-	public void updateViewsChangeRegionBlockRange(TraceMemoryRegion region,
-			AddressRange oldRange, AddressRange newRange) {
+	public void updateViewsChangeRegionBlockRange(TraceMemoryRegion region, AddressRange oldRange,
+			AddressRange newRange) {
 		allViews(v -> v.updateMemoryChangeRegionBlockRange(region, oldRange, newRange));
 	}
 
-	public void updateViewsChangeRegionBlockLifespan(TraceMemoryRegion region,
-			Lifespan oldLifespan, Lifespan newLifespan) {
+	public void updateViewsChangeRegionBlockLifespan(TraceMemoryRegion region, Lifespan oldLifespan,
+			Lifespan newLifespan) {
 		allViews(v -> v.updateMemoryChangeRegionBlockLifespan(region, oldLifespan, newLifespan));
 	}
 

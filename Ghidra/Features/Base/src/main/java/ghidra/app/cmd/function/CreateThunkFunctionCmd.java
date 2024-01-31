@@ -16,10 +16,7 @@
 package ghidra.app.cmd.function;
 
 import java.math.BigInteger;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import ghidra.app.util.PseudoDisassembler;
@@ -27,11 +24,8 @@ import ghidra.framework.cmd.BackgroundCommand;
 import ghidra.framework.model.DomainObject;
 import ghidra.program.database.function.OverlappingFunctionException;
 import ghidra.program.model.address.*;
-import ghidra.program.model.block.BasicBlockModel;
-import ghidra.program.model.block.CodeBlock;
-import ghidra.program.model.block.CodeBlockReference;
-import ghidra.program.model.block.CodeBlockReferenceIterator;
-import ghidra.program.model.block.SimpleBlockModel;
+import ghidra.program.model.block.*;
+import ghidra.program.model.data.DataType;
 import ghidra.program.model.lang.Register;
 import ghidra.program.model.lang.RegisterValue;
 import ghidra.program.model.listing.*;
@@ -474,7 +468,7 @@ public class CreateThunkFunctionCmd extends BackgroundCommand {
 			new ContextEvaluatorAdapter() {
 				@Override
 				public boolean evaluateReference(VarnodeContext context, Instruction instr,
-						int pcodeop, Address address, int size, RefType refType) {
+						int pcodeop, Address address, int size, DataType dataType, RefType refType) {
 					// go ahead and place the reference, since it is a constant.
 					if (refType.isComputed() && refType.isFlow() &&
 						program.getMemory().contains(address)) {
@@ -694,6 +688,7 @@ public class CreateThunkFunctionCmd extends BackgroundCommand {
 			ExternalManager extMgr = program.getExternalManager();
 			ExternalLocation extLoc =
 				extMgr.addExtFunction(Library.UNKNOWN, s.getName(), null, s.getSource());
+			s.delete(); // remove original symbol from EXTERNAL block
 			return extLoc.getExternalSpaceAddress();
 		}
 		catch (DuplicateNameException | InvalidInputException e) {

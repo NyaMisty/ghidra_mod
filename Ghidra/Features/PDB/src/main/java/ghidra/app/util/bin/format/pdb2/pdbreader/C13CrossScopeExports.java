@@ -49,7 +49,7 @@ public class C13CrossScopeExports extends C13Section {
 			throws CancelledException, PdbException {
 		super(ignore);
 		while (reader.numRemaining() >= CrossScopeExport.getBaseRecordSize()) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			CrossScopeExport crossExport = new CrossScopeExport(reader);
 			crossScopeExports.add(crossExport);
 		}
@@ -73,11 +73,13 @@ public class C13CrossScopeExports extends C13Section {
 	 * Dumps this class to a Writer
 	 * @param writer {@link Writer} to which to dump the information
 	 * @throws IOException Upon IOException writing to the {@link Writer}
+	 * @throws CancelledException upon user cancellation
 	 */
 	@Override
-	void dump(Writer writer) throws IOException {
+	void dump(Writer writer, TaskMonitor monitor) throws IOException, CancelledException {
 		writer.write("C13CrossScopeExports----------------------------------------\n");
 		for (CrossScopeExport crossScopeExport : crossScopeExports) {
+			monitor.checkCancelled();
 			writer.write(crossScopeExport.toString());
 			writer.write('\n');
 		}

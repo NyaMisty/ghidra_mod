@@ -47,7 +47,7 @@ import ghidra.util.SystemUtilities;
  */
 public class OptionsGui extends JPanel {
 	private static final Highlight[] NO_HIGHLIGHTS = new Highlight[0];
-	private static final HighlightFactory hlFactory =
+	private static final FieldHighlightFactory hlFactory =
 		(field, text, cursorTextOffset) -> NO_HIGHLIGHTS;
 
 	// @formatter:off
@@ -392,7 +392,7 @@ public class OptionsGui extends JPanel {
 	 * builds the preview panel.
 	 */
 	private JComponent buildPreviewPanel() {
-		fieldPanel = new FieldPanel(new SimpleLayoutModel());
+		fieldPanel = new FieldPanel(new SimpleLayoutModel(), "Preview");
 		IndexedScrollPane scroll = new IndexedScrollPane(fieldPanel);
 		return scroll;
 	}
@@ -895,7 +895,7 @@ public class OptionsGui extends JPanel {
 		private ScreenElement screenElement;
 
 		ScreenElementTextField(ScreenElement screenElement, int startX, int length,
-				FieldElement field, HighlightFactory factory) {
+				FieldElement field, FieldHighlightFactory factory) {
 			super(startX, length, field, factory);
 			this.screenElement = screenElement;
 		}

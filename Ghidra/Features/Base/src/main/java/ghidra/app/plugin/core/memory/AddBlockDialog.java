@@ -30,7 +30,8 @@ import docking.widgets.label.GLabel;
 import docking.widgets.textfield.IntegerTextField;
 import ghidra.app.plugin.core.memory.AddBlockModel.InitializedType;
 import ghidra.app.plugin.core.misc.RegisterField;
-import ghidra.app.util.*;
+import ghidra.app.util.AddressInput;
+import ghidra.app.util.HelpTopics;
 import ghidra.framework.plugintool.PluginTool;
 import ghidra.program.database.mem.FileBytes;
 import ghidra.program.model.address.Address;
@@ -322,7 +323,7 @@ class AddBlockDialog extends DialogComponentProvider implements ChangeListener {
 		overlayCB.setSelected(model.isOverlay());
 
 		setOkEnabled(false);
-		tool.showDialog(this, tool.getComponentProvider(PluginConstants.MEMORY_MAP));
+		tool.showDialog(this);
 	}
 
 	@Override
@@ -543,7 +544,7 @@ class AddBlockDialog extends DialogComponentProvider implements ChangeListener {
 		addrField = new AddressInput();
 		addrField.setName("Start Addr");
 		addrFactory = model.getProgram().getAddressFactory();
-		addrField.setAddressFactory(addrFactory, true, true);
+		addrField.setAddressFactory(addrFactory, AddressInput.INCLUDE_ALL_MEMORY_SPACES);
 		addrField.addChangeListener(ev -> addrChanged());
 		return addrField;
 	}

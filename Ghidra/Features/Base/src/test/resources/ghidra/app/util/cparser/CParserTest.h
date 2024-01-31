@@ -40,7 +40,7 @@ void testFunc()
 {
     typedef int InternFunc(int);
     
-// TODO    InternFunc * func = (InternFunc *) 0;
+    InternFunc * func = (InternFunc *) 0;
 }
 
 
@@ -176,6 +176,11 @@ int (__stdcall * GetSectionBlock) (
 
  #pragma region Input compatibility macros
 
+// nothing will parse after this line if the this fails
+  #pragma test for, pragma, with, commas outside parens
+  
+  #pragma region System Family (kernel drivers) with Desktop Family for compat
+
    #pragma warning(disable)
 
   #pragma warning(disable:4035 4793)               // re-enable below
@@ -187,6 +192,22 @@ int (__stdcall * GetSectionBlock) (
  #pragma our macros nachos (for use only within FileProvider.h)
  
  #pragma warning (suppress: 28128)
+ 
+struct pragmaPassed {
+    char dummy;
+};
+
+int whileWithPragma(int a)
+{
+    do {
+        a++;
+    } while (0 __pragma(warning(disable: 28110)));
+    
+    __pragma(warning(push)) __pragma(warning(disable : 4548)) do {__noop(pszDest);} while((0,0) __pragma(warning(pop)) );
+    
+    return a;
+}
+
 
 int g(int a, int b, int c)
 {
@@ -378,10 +399,16 @@ int      fputs( char * , void * ) __asm("_" "fputs" "$FPOOTS");
 
 void     _exit(int) __attribute__((noreturn));
 
+// NoReturn
+
+extern void gcc_exit (int __status) __attribute__ ((__noreturn__));
+
+__declspec(noreturn) void __cdecl win_exit(int _Code);
+
+void     _exit(int) __attribute__((noreturn));
+
 // C11 noreturn
 void     _Noreturn _Noreturn_exit(int);
-
-
 
 
 // C23 Attributes
@@ -913,6 +940,16 @@ enum options_enum {
 
 	TRINARY =  (0 ? 10 : 11),
 };
+
+/**
+ ** Predeclare Enum
+ **/
+ 
+typedef enum _PARAM_TYPE PARAM_TYPE;
+
+typedef int FuncUseEnum(PARAM_TYPE ptype);
+
+typedef enum _PARAM_TYPE { A, B, C } PARAM_TYPE;
 
 
 /**

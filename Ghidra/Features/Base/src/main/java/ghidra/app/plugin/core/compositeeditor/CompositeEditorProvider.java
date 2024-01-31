@@ -19,8 +19,7 @@ import java.awt.event.MouseEvent;
 
 import javax.swing.*;
 
-import docking.ActionContext;
-import docking.ComponentProvider;
+import docking.*;
 import docking.widgets.OptionDialog;
 import generic.theme.GIcon;
 import ghidra.app.context.ProgramActionContext;
@@ -53,7 +52,7 @@ public abstract class CompositeEditorProvider extends ComponentProviderAdapter
 	protected CompositeEditorActionManager actionMgr;
 
 	/**
-	 * Construct a new stack editor provider. 
+	 * Construct a new stack editor provider.
 	 * @param plugin owner of this provider
 	 */
 	protected CompositeEditorProvider(Plugin plugin) {
@@ -92,6 +91,20 @@ public abstract class CompositeEditorProvider extends ComponentProviderAdapter
 
 	public JTable getTable() {
 		return editorPanel.getTable();
+	}
+
+	public int getFirstEditableColumn(int row) {
+		if (editorPanel == null) {
+			return -1;
+		}
+		JTable table = editorPanel.getTable();
+		int n = table.getColumnCount();
+		for (int col = 0; col < n; col++) {
+			if (table.isCellEditable(row, col)) {
+				return col;
+			}
+		}
+		return -1;
 	}
 
 	protected void initializeActions() {
@@ -189,7 +202,7 @@ public abstract class CompositeEditorProvider extends ComponentProviderAdapter
 		else if (componentAt != null && (originalDTM instanceof StandAloneDataTypeManager)) {
 			return new ComponentStandAloneActionContext(this, componentAt);
 		}
-		return new ActionContext(this, null);
+		return new DefaultActionContext(this, null);
 	}
 
 	@Override
@@ -281,7 +294,7 @@ public abstract class CompositeEditorProvider extends ComponentProviderAdapter
 	 * Prompts the user if the editor has unsaved changes. Saves the changes if
 	 * the user indicates to do so.
 	 * @param allowCancel true if allowed to cancel
-	 * @return 0 if the user canceled; 1 if the user saved changes; 
+	 * @return 0 if the user canceled; 1 if the user saved changes;
 	 * 2 if the user did not to save changes; 3 if there was an error when
 	 * the changes were applied.
 	 */

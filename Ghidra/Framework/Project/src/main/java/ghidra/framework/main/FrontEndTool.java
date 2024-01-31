@@ -59,8 +59,7 @@ import ghidra.framework.main.logviewer.ui.FileViewer;
 import ghidra.framework.main.logviewer.ui.FileWatcher;
 import ghidra.framework.model.*;
 import ghidra.framework.options.*;
-import ghidra.framework.plugintool.Plugin;
-import ghidra.framework.plugintool.PluginTool;
+import ghidra.framework.plugintool.*;
 import ghidra.framework.plugintool.util.*;
 import ghidra.framework.preferences.Preferences;
 import ghidra.framework.project.tool.GhidraTool;
@@ -90,6 +89,7 @@ public class FrontEndTool extends PluginTool implements OptionsChangeListener {
 	public static final String DEFAULT_TOOL_LAUNCH_MODE = "Default Tool Launch Mode";
 	public static final String AUTOMATICALLY_SAVE_TOOLS = "Automatically Save Tools";
 	private static final String USE_ALERT_ANIMATION_OPTION_NAME = "Use Notification Animation";
+	private static final String SHOW_TOOLTIPS_OPTION_NAME = "Show Tooltips";
 
 	// TODO: Experimental Option !!
 	private static final String ENABLE_COMPRESSED_DATABUFFER_OUTPUT =
@@ -130,7 +130,6 @@ public class FrontEndTool extends PluginTool implements OptionsChangeListener {
 
 	private WindowListener windowListener;
 	private DockingAction configureToolAction;
-	private PluginClassManager pluginClassManager;
 
 	/**
 	 * Construct a new Ghidra Project Window.
@@ -165,12 +164,17 @@ public class FrontEndTool extends PluginTool implements OptionsChangeListener {
 	}
 
 	@Override
-	protected void dispose() {
+	public void dispose() {
 		super.dispose();
 
 		if (logProvider != null) {
 			logProvider.dispose();
 		}
+		shutdown();
+	}
+
+	protected void shutdown() {
+		System.exit(0);
 	}
 
 	private void ensureSize() {
@@ -184,11 +188,8 @@ public class FrontEndTool extends PluginTool implements OptionsChangeListener {
 	}
 
 	@Override
-	public PluginClassManager getPluginClassManager() {
-		if (pluginClassManager == null) {
-			pluginClassManager = new PluginClassManager(ApplicationLevelPlugin.class, null);
-		}
-		return pluginClassManager;
+	protected PluginsConfiguration createPluginsConfigurations() {
+		return new ApplicationLevelPluginsConfiguration();
 	}
 
 	public void selectFiles(Set<DomainFile> files) {
@@ -227,7 +228,7 @@ public class FrontEndTool extends PluginTool implements OptionsChangeListener {
 	@Override
 	protected boolean doSaveTool() {
 		// This method is overridden to allow the FrontEndTool to perform custom saving.
-		// The super.doSaveTool is designed to save tools to the user's tool chest directory. The 
+		// The super.doSaveTool is designed to save tools to the user's tool chest directory. The
 		// FrontEndTool saves its state directly in the user's settings directory and includes
 		// the entire project's state such as what tools were running and data states for each
 		// running tool.
@@ -338,11 +339,13 @@ public class FrontEndTool extends PluginTool implements OptionsChangeListener {
 		options.registerOption(USE_ALERT_ANIMATION_OPTION_NAME, true, help,
 			"Signals that user notifications should be animated.  This makes notifications more " +
 				"distinguishable.");
-		options.registerOption(ENABLE_COMPRESSED_DATABUFFER_OUTPUT, Boolean.FALSE, help,
+		options.registerOption(SHOW_TOOLTIPS_OPTION_NAME, true, help,
+			"Controls the display of tooltip popup windows.");
+		options.registerOption(ENABLE_COMPRESSED_DATABUFFER_OUTPUT, false, help,
 			"When enabled data buffers sent to Ghidra Server are compressed (see server " +
 				"configuration for other direction)");
 
-		options.registerOption(RESTORE_PREVIOUS_PROJECT_NAME, Boolean.TRUE, help,
+		options.registerOption(RESTORE_PREVIOUS_PROJECT_NAME, true, help,
 			"Restore the previous project when Ghidra starts.");
 
 		defaultLaunchMode = options.getEnum(DEFAULT_TOOL_LAUNCH_MODE, defaultLaunchMode);
@@ -352,6 +355,9 @@ public class FrontEndTool extends PluginTool implements OptionsChangeListener {
 
 		boolean animationEnabled = options.getBoolean(USE_ALERT_ANIMATION_OPTION_NAME, true);
 		AnimationUtils.setAnimationEnabled(animationEnabled);
+
+		boolean showToolTips = options.getBoolean(SHOW_TOOLTIPS_OPTION_NAME, true);
+		DockingUtils.setTipWindowEnabled(showToolTips);
 
 		boolean compressDataBuffers =
 			options.getBoolean(ENABLE_COMPRESSED_DATABUFFER_OUTPUT, false);
@@ -374,6 +380,9 @@ public class FrontEndTool extends PluginTool implements OptionsChangeListener {
 		else if (USE_ALERT_ANIMATION_OPTION_NAME.equals(optionName)) {
 			AnimationUtils.setAnimationEnabled((Boolean) newValue);
 		}
+		else if (SHOW_TOOLTIPS_OPTION_NAME.equals(optionName)) {
+			DockingUtils.setTipWindowEnabled((Boolean) newValue);
+		}
 		else if (ENABLE_COMPRESSED_DATABUFFER_OUTPUT.equals(optionName)) {
 			DataBuffer.enableCompressedSerializationOutput((Boolean) newValue);
 		}
@@ -383,13 +392,8 @@ public class FrontEndTool extends PluginTool implements OptionsChangeListener {
 	}
 
 	@Override
-	public void exit() {
-		plugin.exitGhidra();
-	}
-
-	@Override
-	public void close() {
-		close(true);
+	protected boolean canClose() {
+		return super.canClose() && plugin.closeActiveProject();
 	}
 
 	/**
@@ -407,6 +411,7 @@ public class FrontEndTool extends PluginTool implements OptionsChangeListener {
 		setProject(project);
 		AppInfo.setActiveProject(project);
 		plugin.setActiveProject(project);
+		firePluginEvent(new ProjectPluginEvent(getClass().getSimpleName(), project));
 	}
 
 	/**
@@ -642,7 +647,7 @@ public class FrontEndTool extends PluginTool implements OptionsChangeListener {
 			}
 		};
 		MenuData menuData =
-			new MenuData(new String[] { ToolConstants.MENU_FILE, "Install Extensions..." }, null,
+			new MenuData(new String[] { ToolConstants.MENU_FILE, "Install Extensions" }, null,
 				CONFIGURE_GROUP);
 		menuData.setMenuSubGroup(CONFIGURE_GROUP + 2);
 		installExtensionsAction.setMenuBarData(menuData);
@@ -669,7 +674,7 @@ public class FrontEndTool extends PluginTool implements OptionsChangeListener {
 			}
 		};
 
-		MenuData menuData = new MenuData(new String[] { ToolConstants.MENU_FILE, "Configure..." },
+		MenuData menuData = new MenuData(new String[] { ToolConstants.MENU_FILE, "Configure" },
 			null, CONFIGURE_GROUP);
 		menuData.setMenuSubGroup(CONFIGURE_GROUP + 1);
 		configureToolAction.setMenuBarData(menuData);

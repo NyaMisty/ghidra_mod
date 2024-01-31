@@ -934,7 +934,8 @@ public class DefaultCompositeMember extends CompositeMember {
 				CompositeMember lastUnionMember = unionMemberList.get(unionMemberList.size() - 1);
 				if (isRelatedBitField(lastUnionMember, member)) {
 					if (lastUnionMember.isSingleBitFieldMember() &&
-						!((DefaultCompositeMember) lastUnionMember).transformIntoStructureContainer()) {
+						!((DefaultCompositeMember) lastUnionMember)
+								.transformIntoStructureContainer()) {
 						return false;
 					}
 					return lastUnionMember.addMember(member);
@@ -1174,7 +1175,7 @@ public class DefaultCompositeMember extends CompositeMember {
 			new DefaultCompositeMember(isClass, editComposite, errorConsumer);
 
 		for (PdbMember m : members) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			try {
 				if (!rootMember.addMember(m, monitor)) {
 					return false;

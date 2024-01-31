@@ -4,9 +4,9 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *      http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -22,11 +22,12 @@ import ghidra.app.util.bin.format.pdb2.pdbreader.*;
 import ghidra.app.util.bin.format.pdb2.pdbreader.PdbException;
 import ghidra.app.util.bin.format.pdb2.pdbreader.symbol.*;
 import ghidra.app.util.bin.format.pdb2.pdbreader.type.*;
-import ghidra.app.util.pdb.pdbapplicator.SymbolGroup.AbstractMsSymbolIterator;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.data.*;
+import ghidra.program.model.lang.CompilerSpec;
 import ghidra.util.Msg;
 import ghidra.util.exception.CancelledException;
+import ghidra.util.exception.InvalidInputException;
 import ghidra.util.task.TaskMonitor;
 import mdemangler.*;
 import mdemangler.object.MDObjectCPP;
@@ -325,30 +326,6 @@ public class PdbResearch {
 		}
 	}
 
-	/**
-	 * Developmental method for breakpoints.  TODO: will delete this from production.
-	 * @param recordNumber the record number tha is being processed (set negative to ignore)
-	 * @param applier the applier that might have additional, such as the name of the type of
-	 * interest
-	 */
-	static void checkBreak(int recordNumber, MsTypeApplier applier) {
-
-		String nn = applier.getMsType().getName();
-		if ("std::__1::__map_value_compare<std::__1::basic_string<char>,std::__1::__value_type<std::__1::basic_string<char>,std::__1::basic_string<wchar_t> >,std::__1::less<void>,1>"
-				.equals(
-					nn)) {
-			doNothingSetBreakPointHere();
-		}
-		if ("class std::__1::__iostream_category".equals(nn)) {
-			doNothingSetBreakPointHere();
-		}
-		if ("std::__1::__do_message".equals(nn)) {
-			doNothingSetBreakPointHere();
-		}
-
-		//checkBreak(recordNumber);
-	}
-
 	//==============================================================================================
 	//==============================================================================================
 	static private void initDeveloperOrderRecordNumbers() {
@@ -399,11 +376,12 @@ public class PdbResearch {
 			throws CancelledException, PdbException {
 		initDeveloperOrderRecordNumbers();
 		for (int indexNumber : developerDebugOrderIndexNumbers) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			PdbResearch.checkBreak(indexNumber);
-			MsTypeApplier applier =
-				applicator.getTypeApplier(RecordNumber.typeRecordNumber(indexNumber));
-			applier.apply();
+			FixupContext fixupContext = new FixupContext();
+			fixupContext.addStagedRecord(indexNumber);
+			applicator.getProcessedDataType(RecordNumber.typeRecordNumber(indexNumber),
+				fixupContext, true);
 		}
 
 	}
@@ -428,9 +406,9 @@ public class PdbResearch {
 		monitor.setMessage("PDB: Applying typedefs...");
 		monitor.initialize(offsets.size());
 
-		AbstractMsSymbolIterator iter = symbolGroup.iterator();
+		MsSymbolIterator iter = symbolGroup.getSymbolIterator();
 		for (long offset : offsets) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			iter.initGetByOffset(offset);
 			if (!childWalkSym(applicator, symbolGroup.getModuleNumber(), iter)) {
 				break;
@@ -439,8 +417,8 @@ public class PdbResearch {
 		}
 	}
 
-	static private boolean childWalkSym(DefaultPdbApplicator applicator, int moduleNumber,
-			AbstractMsSymbolIterator iter) throws PdbException, CancelledException {
+	static private boolean childWalkSym(DefaultPdbApplicator applicator, int streamNumber,
+			MsSymbolIterator iter) throws PdbException, CancelledException {
 		if (!iter.hasNext()) {
 			return false;
 		}
@@ -448,27 +426,27 @@ public class PdbResearch {
 		MsSymbolApplier applier = applicator.getSymbolApplier(iter);
 		if (applier instanceof TypedefSymbolApplier) {
 			TypedefSymbolApplier typedefApplier = (TypedefSymbolApplier) applier;
-			MsTypeApplier typeApplier =
-				applicator.getTypeApplier(typedefApplier.getTypeRecordNumber());
-			System.out.println("UDT " + typedefApplier.getName() + " depends on " +
-				typeApplier.getMsType().toString());
+			RecordNumber typeNumber = typedefApplier.getTypeRecordNumber();
+			AbstractMsType type = applicator.getPdb().getTypeRecord(typeNumber);
+			System.out
+					.println("UDT " + typedefApplier.getName() + " depends on " + type.toString());
 //			applier.apply();
 //			procSym(symbolGroup);
 		}
 		else if (applier instanceof ReferenceSymbolApplier) {
 			ReferenceSymbolApplier refSymbolApplier = (ReferenceSymbolApplier) applier;
-			AbstractMsSymbolIterator refIter =
+			MsSymbolIterator refIter =
 				refSymbolApplier.getInitializedReferencedSymbolGroupIterator();
 			if (refIter == null) {
 				throw new PdbException("PDB: Referenced Symbol Error - not refIter");
 			}
 			// recursion
-			childWalkSym(applicator, refIter.getModuleNumber(), refIter);
+			childWalkSym(applicator, refIter.getStreamNumber(), refIter);
 		}
 		else if (applier instanceof DataSymbolApplier) {
 			DataSymbolApplier dataSymbolApplier = (DataSymbolApplier) applier;
 			MsTypeApplier typeApplier = dataSymbolApplier.getTypeApplier();
-			childWalkType(moduleNumber, typeApplier);
+			childWalkType(streamNumber, typeApplier);
 		}
 		else if (applier instanceof FunctionSymbolApplier) {
 			FunctionSymbolApplier functionSymbolApplier = (FunctionSymbolApplier) applier;
@@ -498,7 +476,7 @@ public class PdbResearch {
 	//==============================================================================================
 	//==============================================================================================
 	static void studyDataTypeConflicts(DefaultPdbApplicator applicator, TaskMonitor monitor)
-			throws CancelledException {
+			throws CancelledException, InvalidInputException {
 		DataTypeConflictHandler handler =
 			DataTypeConflictHandler.REPLACE_EMPTY_STRUCTS_OR_RENAME_AND_ADD_HANDLER;
 		DataTypeManager dtm = applicator.getDataTypeManager();
@@ -510,7 +488,7 @@ public class PdbResearch {
 		FunctionDefinitionDataType fn1 =
 			new FunctionDefinitionDataType(CategoryPath.ROOT, "____fn1____", dtm);
 		fn1.setReturnType(pointer1);
-		fn1.setGenericCallingConvention(GenericCallingConvention.cdecl);
+		fn1.setCallingConvention(CompilerSpec.CALLING_CONVENTION_cdecl);
 		fn1.setArguments(new ParameterDefinition[0]);
 
 		Composite internalStruct1 = createComposite(dtm, "____internal____");
@@ -526,7 +504,7 @@ public class PdbResearch {
 		FunctionDefinitionDataType fn2 =
 			new FunctionDefinitionDataType(CategoryPath.ROOT, "____fn2____", dtm);
 		fn2.setReturnType(pointer2);
-		fn2.setGenericCallingConvention(GenericCallingConvention.cdecl);
+		fn2.setCallingConvention(CompilerSpec.CALLING_CONVENTION_cdecl);
 		fn2.setArguments(new ParameterDefinition[0]);
 
 		Composite internalStruct2 = createComposite(dtm, "____internal____");
@@ -618,7 +596,7 @@ public class PdbResearch {
 	 * reuse caused by Templates and/or Identical Code Folding.
 	 */
 	static void studyAggregateSymbols(DefaultPdbApplicator applicator, TaskMonitor monitor)
-			throws CancelledException {
+			throws CancelledException, PdbException {
 		Map<Address, List<Stuff>> mapByAddress = new HashMap<>();
 		processPublicSymbols(applicator, mapByAddress, monitor);
 		processGlobalSymbols(applicator, mapByAddress, monitor);
@@ -627,7 +605,8 @@ public class PdbResearch {
 	}
 
 	private static void processPublicSymbols(DefaultPdbApplicator applicator,
-			Map<Address, List<Stuff>> map, TaskMonitor monitor) throws CancelledException {
+			Map<Address, List<Stuff>> map, TaskMonitor monitor)
+			throws CancelledException, PdbException {
 		AbstractPdb pdb = applicator.getPdb();
 
 		PdbDebugInfo debugInfo = pdb.getDebugInfo();
@@ -642,13 +621,12 @@ public class PdbResearch {
 
 		PublicSymbolInformation publicSymbolInformation = debugInfo.getPublicSymbolInformation();
 		List<Long> offsets = publicSymbolInformation.getModifiedHashRecordSymbolOffsets();
-		monitor.setMessage(
-			"PDB: Applying " + offsets.size() + " public symbol components...");
+		monitor.setMessage("PDB: Applying " + offsets.size() + " public symbol components...");
 		monitor.initialize(offsets.size());
 
-		AbstractMsSymbolIterator iter = symbolGroup.iterator();
+		MsSymbolIterator iter = symbolGroup.getSymbolIterator();
 		for (long offset : offsets) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			iter.initGetByOffset(offset);
 			if (!iter.hasNext()) {
 				break;
@@ -662,7 +640,8 @@ public class PdbResearch {
 	}
 
 	private static void processGlobalSymbols(DefaultPdbApplicator applicator,
-			Map<Address, List<Stuff>> map, TaskMonitor monitor) throws CancelledException {
+			Map<Address, List<Stuff>> map, TaskMonitor monitor)
+			throws CancelledException, PdbException {
 		AbstractPdb pdb = applicator.getPdb();
 
 		PdbDebugInfo debugInfo = pdb.getDebugInfo();
@@ -680,9 +659,9 @@ public class PdbResearch {
 		monitor.setMessage("PDB: Applying global symbols...");
 		monitor.initialize(offsets.size());
 
-		AbstractMsSymbolIterator iter = symbolGroup.iterator();
+		MsSymbolIterator iter = symbolGroup.getSymbolIterator();
 		for (long offset : offsets) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			iter.initGetByOffset(offset);
 			if (!iter.hasNext()) {
 				break;
@@ -696,7 +675,8 @@ public class PdbResearch {
 	}
 
 	private static void processModuleSymbols(DefaultPdbApplicator applicator,
-			Map<Address, List<Stuff>> map, TaskMonitor monitor) throws CancelledException {
+			Map<Address, List<Stuff>> map, TaskMonitor monitor)
+			throws CancelledException, PdbException {
 		AbstractPdb pdb = applicator.getPdb();
 		PdbDebugInfo debugInfo = pdb.getDebugInfo();
 		if (debugInfo == null) {
@@ -706,20 +686,19 @@ public class PdbResearch {
 		int totalCount = 0;
 		int num = debugInfo.getNumModules();
 		for (int moduleNumber = 1; moduleNumber <= num; moduleNumber++) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			SymbolGroup symbolGroup = applicator.getSymbolGroupForModule(moduleNumber);
 			if (symbolGroup == null) {
 				continue;
 			}
 			totalCount += symbolGroup.size();
 		}
-		monitor.setMessage(
-			"PDB: Applying " + totalCount + " module symbol components...");
+		monitor.setMessage("PDB: Applying " + totalCount + " module symbol components...");
 		monitor.initialize(totalCount);
 
 		// Process symbols list for each module
 		for (int moduleNumber = 1; moduleNumber <= num; moduleNumber++) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 
 //			String moduleName =
 //				pdb.getDebugInfo().getModuleInformation(index).getModuleName();
@@ -729,7 +708,7 @@ public class PdbResearch {
 			if (symbolGroup == null) {
 				continue;
 			}
-			AbstractMsSymbolIterator iter = symbolGroup.iterator();
+			MsSymbolIterator iter = symbolGroup.getSymbolIterator();
 			processSymbolGroup(applicator, map, moduleNumber, iter, monitor);
 			// do not call monitor.incrementProgress(1) here, as it is updated inside of
 			//  processSymbolGroup.
@@ -737,11 +716,11 @@ public class PdbResearch {
 	}
 
 	private static void processSymbolGroup(DefaultPdbApplicator applicator,
-			Map<Address, List<Stuff>> map, int moduleNumber, AbstractMsSymbolIterator iter,
+			Map<Address, List<Stuff>> map, int moduleNumber, MsSymbolIterator iter,
 			TaskMonitor monitor) throws CancelledException {
 		iter.initGet();
 		while (iter.hasNext()) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			AbstractMsSymbol symbol = iter.next();
 			if (symbol != null) {
 				processPublicSymbol(applicator, map, symbol);
@@ -878,7 +857,7 @@ public class PdbResearch {
 		PdbLog.message("STUDY_START: studyCompositeFwdRefDef");
 		//System.out.println("STUDY_START");
 		while (indexNumber < indexLimit) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			if (!covered[indexNumber]) {
 				AbstractMsType type = pdb.getTypeRecord(RecordNumber.typeRecordNumber(indexNumber));
 				covered[indexNumber] = true;
@@ -926,7 +905,7 @@ public class PdbResearch {
 					//System.out.println("----------\n" + name + "\n" + c);
 					int innerIndexNumber = indexNumber + 1;
 					while (innerIndexNumber < indexLimit) {
-						monitor.checkCanceled();
+						monitor.checkCancelled();
 						if (!covered[innerIndexNumber]) {
 							AbstractMsType innerType =
 								pdb.getTypeRecord(RecordNumber.typeRecordNumber(innerIndexNumber));
@@ -1038,7 +1017,7 @@ public class PdbResearch {
 		monitor.initialize(indexLimit - indexNumber);
 		monitor.setMessage("Study: NAMES_START");
 		while (indexNumber < indexLimit) {
-			monitor.checkCanceled();
+			monitor.checkCancelled();
 			String name;
 			String record;
 			AbstractMsType type = pdb.getTypeRecord(RecordNumber.typeRecordNumber(indexNumber));
@@ -1079,7 +1058,7 @@ public class PdbResearch {
 		monitor.initialize(orderedNames.size());
 		for (String name : orderedNames) {
 			for (String record : orderedRecords) {
-				monitor.checkCanceled();
+				monitor.checkCancelled();
 				if (record.startsWith(name)) {
 					System.out.println(record);
 				}

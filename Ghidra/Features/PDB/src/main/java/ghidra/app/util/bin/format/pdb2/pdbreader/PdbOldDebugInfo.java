@@ -70,13 +70,13 @@ public class PdbOldDebugInfo extends PdbDebugInfo {
 	}
 
 	@Override
-	protected void deserializeAdditionalSubstreams()
+	protected void initializeAdditionalComponentsForSubstreams()
 			throws IOException, PdbException, CancelledException {
 		// TODO: evaluate.  I don't think we need GlobalSymbolInformation (hash) or the
 		//  PublicSymbolInformation (hash), as they are both are search mechanisms.
-		symbolRecords.deserialize();
-		globalSymbolInformation.deserialize(getGlobalSymbolsHashMaybeStreamNumber());
-		publicSymbolInformation.deserialize(getPublicStaticSymbolsHashMaybeStreamNumber());
+		symbolRecords.initialize();
+		globalSymbolInformation.initialize();
+		publicSymbolInformation.initialize();
 		//TODO: SectionContributions has information about code sections and refers to
 		// debug streams for each.
 	}
@@ -94,7 +94,7 @@ public class PdbOldDebugInfo extends PdbDebugInfo {
 		PdbByteReader substreamReader =
 			reader.getSubPdbByteReader(lengthModuleInformationSubstream);
 		while (substreamReader.hasMore()) {
-			pdb.checkCanceled();
+			pdb.checkCancelled();
 			ModuleInformation moduleInformation = new ModuleInformation500(pdb);
 			moduleInformation.deserialize(substreamReader);
 			moduleInformationList.add(moduleInformation);

@@ -15,6 +15,9 @@
  */
 package ghidra.app.util.bin.format.golang;
 
+import ghidra.framework.options.Options;
+import ghidra.program.model.listing.Program;
+
 /**
  * Golang version numbers
  */
@@ -23,12 +26,16 @@ public enum GoVer {
 	V1_2(1, 2),
 	V1_16(1, 16),
 	V1_17(1, 17),
-	V1_18(1, 18);
+	V1_18(1, 18),
+	V1_19(1, 19),
+	V1_20(1, 20),
+	V1_21(1, 21),
+	V1_22(1, 22);
 
 	private final int major;
 	private final int minor;
 
-	private GoVer(int major, int minor) {
+	GoVer(int major, int minor) {
 		this.major = major;
 		this.minor = minor;
 	}
@@ -84,8 +91,20 @@ public enum GoVer {
 			}
 		}
 		catch (NumberFormatException e) {
-			return UNKNOWN;
+			// fall thru, return unknown
 		}
 		return UNKNOWN;
 	}
+
+	public static final String GOLANG_VERSION_PROPERTY_NAME = "Golang go version";
+	public static GoVer fromProgramProperties(Program program) {
+		Options props = program.getOptions(Program.PROGRAM_INFO);
+		String verStr = props.getString(GOLANG_VERSION_PROPERTY_NAME, null);
+		return verStr != null ? parse(verStr) : UNKNOWN;
+	}
+
+	public static void setProgramPropertiesWithOriginalVersionString(Options props, String s) {
+		props.setString(GOLANG_VERSION_PROPERTY_NAME, s);
+	}
+
 }

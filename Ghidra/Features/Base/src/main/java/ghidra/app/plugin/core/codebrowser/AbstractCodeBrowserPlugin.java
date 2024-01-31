@@ -38,7 +38,7 @@ import ghidra.app.events.ProgramSelectionPluginEvent;
 import ghidra.app.nav.Navigatable;
 import ghidra.app.plugin.core.codebrowser.hover.ListingHoverService;
 import ghidra.app.services.*;
-import ghidra.app.util.HighlightProvider;
+import ghidra.app.util.ListingHighlightProvider;
 import ghidra.app.util.ProgramDropProvider;
 import ghidra.app.util.viewer.field.*;
 import ghidra.app.util.viewer.format.*;
@@ -114,7 +114,6 @@ public abstract class AbstractCodeBrowserPlugin<P extends CodeViewerProvider> ex
 		initMiscellaneousOptions();
 		displayOptions.addOptionsChangeListener(this);
 		fieldOptions.addOptionsChangeListener(this);
-		tool.setDefaultComponent(connectedProvider);
 		markerChangeListener = new MarkerChangeListener(connectedProvider);
 	}
 
@@ -322,13 +321,13 @@ public abstract class AbstractCodeBrowserPlugin<P extends CodeViewerProvider> ex
 	}
 
 	@Override
-	public void removeHighlightProvider(HighlightProvider highlightProvider,
+	public void removeHighlightProvider(ListingHighlightProvider highlightProvider,
 			Program highlightProgram) {
 		connectedProvider.removeHighlightProvider(highlightProvider, highlightProgram);
 	}
 
 	@Override
-	public void setHighlightProvider(HighlightProvider highlightProvider,
+	public void setHighlightProvider(ListingHighlightProvider highlightProvider,
 			Program highlightProgram) {
 		connectedProvider.setHighlightProvider(highlightProvider, highlightProgram);
 	}
@@ -735,8 +734,9 @@ public abstract class AbstractCodeBrowserPlugin<P extends CodeViewerProvider> ex
 
 		int instanceNum = 0;
 		for (int i = 0; i < layout.getNumFields(); i++) {
-			ListingField bf = (ListingField) layout.getField(i);
-			if (bf.getFieldFactory().getFieldName().equals(fieldName)) {
+			Field f = layout.getField(i);
+			if ((f instanceof ListingField bf) &&
+				bf.getFieldFactory().getFieldName().equals(fieldName)) {
 				if (instanceNum++ == occurrence) {
 					fieldNum = i;
 					break;
@@ -870,14 +870,14 @@ public abstract class AbstractCodeBrowserPlugin<P extends CodeViewerProvider> ex
 
 	@Override
 	public void domainObjectChanged(DomainObjectChangedEvent ev) {
-		if (ev.containsEvent(DomainObject.DO_DOMAIN_FILE_CHANGED)) {
+		if (ev.contains(DomainObjectEvent.FILE_CHANGED)) {
 			connectedProvider.updateTitle();
 		}
 
 		if (viewManager != null) {
 			return;
 		}
-		if (ev.containsEvent(DomainObject.DO_OBJECT_RESTORED)) {
+		if (ev.contains(DomainObjectEvent.RESTORED)) {
 			viewChanged(currentProgram.getMemory());
 		}
 	}

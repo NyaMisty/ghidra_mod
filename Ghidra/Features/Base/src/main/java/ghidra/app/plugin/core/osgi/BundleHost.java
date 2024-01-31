@@ -303,6 +303,22 @@ public class BundleHost {
 	}
 
 	/**
+	 * Return the list of currently managed enabled bundle files.
+	 * 
+	 * @return all the enabled bundle files
+	 */
+	public Collection<ResourceFile> getEnabledBundleFiles() {
+		List<ResourceFile> enabledList = new ArrayList<>();
+		for (ResourceFile bundleFile : bundleMap.getBundleFiles()) {
+			GhidraBundle bundle = bundleMap.get(bundleFile);
+			if (bundle.isEnabled()) {
+				enabledList.add(bundleFile);
+			}
+		}
+		return enabledList;
+	}
+
+	/**
 	 * Attempt to resolve a list of BundleRequirements with active Bundle capabilities.
 	 * 
 	 * @param requirements list of requirements -- satisfied requirements are removed as 
@@ -457,6 +473,10 @@ public class BundleHost {
 
 		frameworkBundleContext = felixFramework.getBundleContext();
 
+		if (frameworkBundleContext == null) {
+			throw new OSGiException("Felix OSGi framework has no bundle context");
+		}
+
 		addDebuggingListeners();
 
 		Bundle bundle = frameworkBundleContext.getBundle();
@@ -512,6 +532,11 @@ public class BundleHost {
 	 * @return the OSGi bundle or null
 	 */
 	Bundle getOSGiBundle(String bundleLocation) {
+		// TODO: Is it safe/better to return null when the framework isn't started?
+		// 'frameworkBundleContext' is currently not set to null when it gets stopped.
+		if (frameworkBundleContext == null) {
+			return null;
+		}
 		return frameworkBundleContext.getBundle(bundleLocation);
 	}
 
@@ -667,7 +692,7 @@ public class BundleHost {
 			}
 			catch (Exception e) {
 				// write the error to the console or log file
-				console.println("Unexpected error activating bundles: " + bundles);
+				console.println("Unexpected error activating bundle: " + bundle);
 				e.printStackTrace(console);
 			}
 			monitor.incrementProgress(1);
@@ -736,7 +761,7 @@ public class BundleHost {
 				}
 				catch (Exception e) {
 					// write the error to the console or log file
-					console.println("Unexpected error activating bundles: " + bundles);
+					console.println("Unexpected error activating bundle: " + bundle);
 					e.printStackTrace(console);
 				}
 				monitor.incrementProgress(1);

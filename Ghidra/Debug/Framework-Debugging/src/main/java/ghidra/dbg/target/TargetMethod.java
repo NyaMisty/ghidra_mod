@@ -17,8 +17,8 @@ package ghidra.dbg.target;
 
 import java.lang.annotation.*;
 import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodType;
 import java.lang.invoke.MethodHandles.Lookup;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -32,9 +32,6 @@ import ghidra.dbg.DebuggerTargetObjectIface;
 import ghidra.dbg.agent.AbstractDebuggerObjectModel;
 import ghidra.dbg.agent.DefaultTargetObject;
 import ghidra.dbg.error.DebuggerIllegalArgumentException;
-import ghidra.dbg.target.TargetMethod.*;
-import ghidra.dbg.target.TargetMethod.TargetParameterMap.EmptyTargetParameterMap;
-import ghidra.dbg.target.TargetMethod.TargetParameterMap.ImmutableTargetParameterMap;
 import ghidra.dbg.target.schema.TargetAttributeType;
 import ghidra.dbg.util.CollectionUtils.AbstractEmptyMap;
 import ghidra.dbg.util.CollectionUtils.AbstractNMap;
@@ -283,7 +280,7 @@ public interface TargetMethod extends TargetObject {
 		 * @param <T> the type of the parameter
 		 * @param type the class representing the type of the parameter
 		 * @param name the name of the parameter
-		 * @param choices the non-empty set of choices
+		 * @param choices the non-empty set of choices. The first is the default.
 		 * @param display the human-readable name of this parameter
 		 * @param description the human-readable description of this parameter
 		 * @return the new parameter description
@@ -291,6 +288,27 @@ public interface TargetMethod extends TargetObject {
 		public static <T> ParameterDescription<T> choices(Class<T> type, String name,
 				Collection<T> choices, String display, String description) {
 			T defaultValue = choices.iterator().next();
+			return new ParameterDescription<>(type, name, false, defaultValue, display, description,
+				choices);
+		}
+
+		/**
+		 * Create a parameter having enumerated choices
+		 * 
+		 * @param <T> the type of the parameter
+		 * @param type the class representing the type of the parameter
+		 * @param name the name of the parameter
+		 * @param choices the non-empty set of choices
+		 * @param defaultValue the default value of this parameter
+		 * @param display the human-readable name of this parameter
+		 * @param description the human-readable description of this parameter
+		 * @return the new parameter description
+		 */
+		public static <T> ParameterDescription<T> choices(Class<T> type, String name,
+				Collection<T> choices, T defaultValue, String display, String description) {
+			if (!choices.contains(defaultValue)) {
+				throw new IllegalArgumentException("Default must be one of the choices.");
+			}
 			return new ParameterDescription<>(type, name, false, defaultValue, display, description,
 				choices);
 		}
@@ -443,9 +461,31 @@ public interface TargetMethod extends TargetObject {
 			}
 			if (required) {
 				throw new DebuggerIllegalArgumentException(
-					"Missing required parameter '" + name + "'");
+					"Missing required parameter '" + display + "' (" + name + ")");
 			}
 			return defaultValue;
+		}
+
+		/**
+		 * Set the argument for this parameter
+		 * 
+		 * @param arguments the arguments to modify
+		 * @param value the value to assign the parameter
+		 */
+		public void set(Map<String, ? super T> arguments, T value) {
+			arguments.put(name, value);
+		}
+
+		/**
+		 * Adjust the argument for this parameter
+		 * 
+		 * @param arguments the arguments to modify
+		 * @param adjuster a function of the old argument to the new argument. If the argument is
+		 *            not currently set, the function will receive null.
+		 */
+		@SuppressWarnings("unchecked")
+		public void adjust(Map<String, ? super T> arguments, Function<T, T> adjuster) {
+			arguments.put(name, adjuster.apply((T) arguments.get(name)));
 		}
 
 		@Override
@@ -599,7 +639,7 @@ public interface TargetMethod extends TargetObject {
 	 * @param permitExtras false to require every named argument has a named parameter
 	 * @return the map of validated arguments
 	 */
-	static Map<String, ?> validateArguments(Map<String, ParameterDescription<?>> parameters,
+	static Map<String, Object> validateArguments(Map<String, ParameterDescription<?>> parameters,
 			Map<String, ?> arguments, boolean permitExtras) {
 		if (!permitExtras) {
 			if (!parameters.keySet().containsAll(arguments.keySet())) {

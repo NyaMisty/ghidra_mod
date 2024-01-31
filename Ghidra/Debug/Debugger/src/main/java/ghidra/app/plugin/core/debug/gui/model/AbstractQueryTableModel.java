@@ -16,11 +16,13 @@
 package ghidra.app.plugin.core.debug.gui.model;
 
 import java.awt.Color;
+import java.util.ArrayList;
 import java.util.Objects;
 import java.util.stream.Stream;
 
 import docking.widgets.table.RangeCursorTableHeaderRenderer.SeekListener;
 import docking.widgets.table.threaded.ThreadedTableModel;
+import ghidra.framework.model.DomainObjectEvent;
 import ghidra.framework.model.DomainObjectChangeRecord;
 import ghidra.framework.plugintool.Plugin;
 import ghidra.trace.model.*;
@@ -37,7 +39,7 @@ public abstract class AbstractQueryTableModel<T> extends ThreadedTableModel<T, T
 
 	protected class ListenerForChanges extends TraceDomainObjectListener {
 		public ListenerForChanges() {
-			listenForUntyped(Trace.DO_OBJECT_RESTORED, this::objectRestored);
+			listenForUntyped(DomainObjectEvent.RESTORED, this::objectRestored);
 			listenFor(TraceObjectChangeType.VALUE_CREATED, this::valueCreated);
 			listenFor(TraceObjectChangeType.VALUE_DELETED, this::valueDeleted);
 			listenFor(TraceObjectChangeType.VALUE_LIFESPAN_CHANGED, this::valueLifespanChanged);
@@ -303,9 +305,17 @@ public abstract class AbstractQueryTableModel<T> extends ThreadedTableModel<T, T
 		if (trace == null || query == null || trace.getObjectManager().getRootSchema() == null) {
 			return;
 		}
+		ArrayList<T> batch = new ArrayList<>(100);
 		for (T t : (Iterable<T>) streamRows(trace, query, span)::iterator) {
-			accumulator.add(t);
-			monitor.checkCanceled();
+			batch.add(t);
+			if (batch.size() >= 100) {
+				accumulator.addAll(batch);
+				monitor.checkCancelled();
+				batch.clear();
+			}
+		}
+		if (batch.size() > 0) {
+			accumulator.addAll(batch);
 		}
 	}
 

@@ -54,12 +54,6 @@ public class WindowsResourceReferenceScriptTest extends AbstractGhidraHeadedInte
 		pm.openProgram(program.getDomainFile());
 	}
 
-	private void closeProgram() {
-		ProgramManager pm = env.getTool().getService(ProgramManager.class);
-		pm.closeProgram();
-		waitForPostedSwingRunnables();
-	}
-
 	@After
 	public void tearDown() throws Exception {
 		env.dispose();
@@ -83,7 +77,7 @@ public class WindowsResourceReferenceScriptTest extends AbstractGhidraHeadedInte
 		ScriptTaskListener scriptId = env.runScript(script);
 		waitForScriptCompletion(scriptId, 65000);
 		program.flushEvents();
-		waitForPostedSwingRunnables();
+		waitForSwing();
 
 		Listing listing = program.getListing();
 
@@ -102,7 +96,6 @@ public class WindowsResourceReferenceScriptTest extends AbstractGhidraHeadedInte
 			//Check the reference type created is of type DATA
 			assertTrue(type.equals(RefType.DATA));
 		}
-		closeProgram();
 	}
 
 	@Test
@@ -118,7 +111,7 @@ public class WindowsResourceReferenceScriptTest extends AbstractGhidraHeadedInte
 		ScriptTaskListener scriptID = env.runScript(script);
 		waitForScriptCompletion(scriptID, 60000);
 		program.flushEvents();
-		waitForPostedSwingRunnables();
+		waitForSwing();
 
 		Listing listing = program.getListing();
 
@@ -135,8 +128,6 @@ public class WindowsResourceReferenceScriptTest extends AbstractGhidraHeadedInte
 			//check the reference type created is of type DATA
 			assertTrue(type.equals(RefType.DATA));
 		}
-
-		closeProgram();
 	}
 
 	private Address addr(long offset, Program program) {
