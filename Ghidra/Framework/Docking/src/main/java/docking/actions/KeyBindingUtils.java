@@ -476,7 +476,7 @@ public class KeyBindingUtils {
 		}
 		if (action.getKeyBindingData() != null) {
 			var precedence = action.getKeyBindingData().getKeyBindingPrecedence();
-			if (precedence == KeyBindingPrecedence.ReservedActionsLevel) {
+			if (precedence == KeyBindingPrecedence.SystemActionsLevel) {
 				return true;
 			}
 		}

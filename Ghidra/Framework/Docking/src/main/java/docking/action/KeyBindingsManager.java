@@ -28,7 +28,6 @@ import docking.*;
 import docking.actions.KeyBindingUtils;
 import ghidra.util.Msg;
 import generic.test.TestUtils;
-import generic.util.action.ReservedKeyBindings;
 import ghidra.util.exception.AssertException;
 import gui.event.MouseBinding;
 
