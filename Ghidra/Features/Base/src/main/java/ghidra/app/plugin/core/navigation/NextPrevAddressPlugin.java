@@ -20,8 +20,7 @@ import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.List;
 
-import javax.swing.Icon;
-import javax.swing.KeyStroke;
+import javax.swing.*;
 
 import docking.ActionContext;
 import docking.action.*;
@@ -327,6 +326,13 @@ public class NextPrevAddressPlugin extends Plugin {
 
 		@Override
 		public boolean isEnabledForContext(ActionContext context) {
+			// Ghidra Mod - Esc2Exit
+			//     Must do this to avoid Esc triggering both popup view and main view
+			JFrame toolFrame = tool.getToolFrame();
+			if (toolFrame != null && !toolFrame.isActive()) {
+				return false;
+			}
+
 			Navigatable navigatable = getNavigatable(context);
 			if (navigatable == null) {
 				return false;
