@@ -32,6 +32,7 @@ import ghidra.util.table.*;
 
 import ghidra.app.nav.Navigatable;
 import ghidra.app.services.GoToServiceWrap;
+import ghidra.app.services.GoToService;
 import ghidra.program.model.listing.Program;
 import ghidra.program.util.ProgramLocation;
 
@@ -89,15 +90,13 @@ public class LocationReferencesPanel extends JPanel {
 		setLayout(new BorderLayout(10, 10));
 
 		PluginTool tool = locationReferencesProvider.getTool();
-		table.installNavigation(tool);
-
-		GhidraTableFilterPanel<LocationReference> tableFilterPanel =
-			new GhidraTableFilterPanel<>(table, tableModel);
-		add(tablePanel, BorderLayout.CENTER);
-		add(tableFilterPanel, BorderLayout.SOUTH);
 
 		// Ghidra Mod - Supports Modal LocationReferences
+		// disable original setup
+		// table.installNavigation(tool);
+
 		putClientProperty("ghidramod.modalcomponent", "1");
+
 		table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		table.setNavigateOnSelectionEnabled(false);
 		Runnable closePanelRunnable = () -> {
@@ -105,6 +104,7 @@ public class LocationReferencesPanel extends JPanel {
 			// must do this, or next time the xref panel would be empty
 			locationReferencesProvider.closeComponent();
 		};
+		GoToService goToService = tool.getService(GoToService.class);
 		goToService = new WrapGoToService(goToService, closePanelRunnable);
 		table.installNavigation(goToService, goToService.getDefaultNavigatable());
 		table.addKeyListener(new KeyAdapter() {
@@ -116,6 +116,12 @@ public class LocationReferencesPanel extends JPanel {
 				}
 			}
 		});
+
+		GhidraTableFilterPanel<LocationReference> tableFilterPanel =
+			new GhidraTableFilterPanel<>(table, tableModel);
+		add(tablePanel, BorderLayout.CENTER);
+		add(tableFilterPanel, BorderLayout.SOUTH);
+
 	}
 
 	Collection<Address> getReferenceAddresses() {
