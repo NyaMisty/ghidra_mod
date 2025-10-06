@@ -15,6 +15,7 @@
  */
 package docking.action;
 
+import java.awt.event.InputEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.security.InvalidParameterException;
@@ -27,7 +28,6 @@ import docking.*;
 import docking.actions.KeyBindingUtils;
 import ghidra.util.Msg;
 import generic.test.TestUtils;
-import generic.util.action.ReservedKeyBindings;
 import ghidra.util.exception.AssertException;
 import gui.event.MouseBinding;
 
