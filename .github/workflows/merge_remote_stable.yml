@@ -1,8 +1,8 @@
-name: Scheduled Merge Remote Action
+name: Scheduled Merge Remote Action (stable)
 env:
   UPSTREAM: https://github.com/NationalSecurityAgency/ghidra.git
-  UPSTREAM_BRANCH: master
-  LOCAL_BRANCH: master
+  UPSTREAM_BRANCH: stable
+  LOCAL_BRANCH: stable
 
 on: 
   schedule:
