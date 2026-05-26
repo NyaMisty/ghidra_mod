@@ -261,6 +261,9 @@ public class FunctionPlugin extends Plugin implements DataService {
 		editOperandNameAction = new EditOperandNameAction(this);
 		tool.addAction(editOperandNameAction);
 
+		// XXX: misty patch
+		tool.addAction(new DeleteFunctionActionNoListing(this));
+
 		editFunctionNameAction = new EditNameAction(true, this);
 		tool.addAction(editFunctionNameAction);
 

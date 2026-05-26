@@ -15,11 +15,15 @@
  */
 package ghidra.app.plugin.core.function;
 
+import java.awt.*;
 import java.awt.event.KeyEvent;
 
+import docking.ActionContext;
+import docking.action.DockingAction;
 import docking.action.KeyBindingData;
 import docking.action.MenuData;
 import ghidra.app.cmd.function.DeleteFunctionCmd;
+import ghidra.app.context.FunctionSupplierContext;
 import ghidra.app.context.ListingActionContext;
 import ghidra.app.context.ListingContextAction;
 import ghidra.program.model.address.Address;
@@ -70,4 +74,43 @@ class DeleteFunctionAction extends ListingContextAction {
 		return false;
 	}
 
+}
+
+class DeleteFunctionActionNoListing extends DockingAction {
+	FunctionPlugin funcPlugin;
+
+	/**
+	 * Creates a new action with the given name and associated to the given
+	 * plugin.
+	 * @param plugin the plugin this action is associated with.
+	 */
+	DeleteFunctionActionNoListing(FunctionPlugin plugin) {
+		super("Delete Function (FunctionsView)", plugin.getName());
+		this.funcPlugin = plugin;
+		setPopupMenuData(new MenuData(new String[] {"Delete Function(s)"}, null, FunctionPlugin.FUNCTION_MENU_SUBGROUP));
+		setContextClass(FunctionSupplierContext.class, false);
+		setKeyBindingData(new KeyBindingData(KeyEvent.VK_DELETE, 0));
+	}
+
+	private boolean isListing(FunctionSupplierContext context) {
+		return context instanceof ListingActionContext;
+	}
+
+	@Override
+	public boolean isEnabledForContext(ActionContext _context) {
+		FunctionSupplierContext context = (FunctionSupplierContext)_context;
+		return !isListing(context) && context.hasFunctions();
+	}
+
+	@Override
+	public void actionPerformed(ActionContext _context) {
+		FunctionSupplierContext context = (FunctionSupplierContext)_context;
+		for (Function function : context.getFunctions()) {
+			if (function == null) {
+				return;
+			}
+			Address entry = function.getEntryPoint();
+			funcPlugin.execute(function.getProgram(), new DeleteFunctionCmd(entry));
+		}
+	}
 }
